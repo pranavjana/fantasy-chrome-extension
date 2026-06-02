@@ -9,6 +9,33 @@ function clampLimit(limit, fallback = 6, max = 10) {
   return Math.max(1, Math.min(max, Math.floor(limit)));
 }
 
+function isMissingContentScriptError(error) {
+  return error instanceof Error &&
+    error.message.includes("Receiving end does not exist");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendActiveTabMessage(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (error) {
+    if (!isMissingContentScriptError(error)) {
+      throw error;
+    }
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["src/content/content-script.js"]
+  });
+  await delay(100);
+
+  return chrome.tabs.sendMessage(tabId, message);
+}
+
 export const AGENT_TOOLS = [
   {
     name: "refresh_fifa_players",
@@ -56,6 +83,25 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object",
       properties: {}
+    }
+  },
+  {
+    name: "add_fantasy_player",
+    description: "Add a FIFA World Cup Fantasy player on the active browser tab. If position is provided and the player list is not open, first click an empty slot for that position, then search the player list by scrolling and click the player's add button. Only use this after the user explicitly asks to change their team.",
+    input_schema: {
+      type: "object",
+      properties: {
+        playerName: {
+          type: "string",
+          description: "Visible player name to add, for example Hakimi, Kane, or Mbappé."
+        },
+        position: {
+          type: "string",
+          enum: ["GK", "DEF", "MID", "FWD"],
+          description: "Optional empty squad slot position to open before adding the player."
+        }
+      },
+      required: ["playerName"]
     }
   },
   {
@@ -111,6 +157,31 @@ export async function executeAgentTool(name, input, context) {
       count: cache.count,
       url: cache.url
     };
+  }
+
+  if (name === "add_fantasy_player") {
+    const playerName = typeof input.playerName === "string" ? input.playerName.trim() : "";
+    const position = typeof input.position === "string" ? input.position.trim().toUpperCase() : "";
+
+    if (!playerName) {
+      throw new Error("playerName is required.");
+    }
+
+    if (!context.activeTabId) {
+      throw new Error("No active tab is available for browser actions.");
+    }
+
+    const result = await sendActiveTabMessage(context.activeTabId, {
+      type: "ADD_FANTASY_PLAYER",
+      playerName,
+      position
+    });
+
+    if (!result?.ok) {
+      throw new Error(result?.error || "Could not add fantasy player.");
+    }
+
+    return result;
   }
 
   if (name === "tinyfish_search") {

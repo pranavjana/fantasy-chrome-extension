@@ -10,9 +10,12 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 });
 
-async function getActivePageContext() {
+async function getActiveTab() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
+  return tabs[0] || null;
+}
+
+async function getActivePageContext(tab) {
   if (!tab?.id || !tab.url || tab.url.startsWith("chrome://")) {
     return null;
   }
@@ -74,11 +77,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "AGENT_CHAT") {
     (async () => {
-      const pageContext = await getActivePageContext();
+      const activeTab = await getActiveTab();
+      const pageContext = await getActivePageContext(activeTab);
       const result = await runAgentTurn({
         messages: message.messages || [],
         userMessage: String(message.userMessage || ""),
-        pageContext
+        pageContext,
+        activeTabId: activeTab?.id
       });
       sendResponse({ ok: true, ...result });
     })().catch((error) => {
@@ -104,11 +109,13 @@ chrome.runtime.onConnect.addListener((port) => {
     }
 
     (async () => {
-      const pageContext = await getActivePageContext();
+      const activeTab = await getActiveTab();
+      const pageContext = await getActivePageContext(activeTab);
       const result = await runAgentTurn({
         messages: message.messages || [],
         userMessage: String(message.userMessage || ""),
         pageContext,
+        activeTabId: activeTab?.id,
         onEvent: (event) => port.postMessage(event)
       });
 

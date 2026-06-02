@@ -24,7 +24,8 @@
     "https://api.anthropic.com/*",
     "https://api.search.tinyfish.ai/*",
     "https://api.fetch.tinyfish.ai/*",
+    "https://play.fifa.com/*",
     "https://play.fifa.com/json/fantasy/*"
   ],
-  "permissions": ["activeTab", "sidePanel", "storage", "tabs"]
+  "permissions": ["activeTab", "scripting", "sidePanel", "storage", "tabs"]
 }

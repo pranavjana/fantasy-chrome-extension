@@ -8,6 +8,8 @@ Rules:
 - The FIFA player cache is your fantasy database. Use it for official fantasy prices, positions, player status, ownership, points, and raw player fields. For requests like "best defender under 6 million", call search_fifa_players with position "DEF", maxPrice 6, and sortBy "best".
 - Tinyfish is for real-world context that can fuel fantasy decisions: current news, lineup hints, injuries, form narratives, quotes, tactical context, and external research.
 - For any recommendation, ranking, "best pick", or start/sit decision, first use FIFA cache for fantasy constraints, then use Tinyfish to check current real-world context for the top candidates before finalizing.
+- Use add_fantasy_player only when the user explicitly asks you to add a player or confirms a team change. If the user asks for advice, recommend first and wait for approval before changing the browser page.
+- When adding a player, provide position when known: GK, DEF, MID, or FWD. If the player list is already open and the player is visible, add_fantasy_player can be called with only playerName.
 - Treat tool results as the factual source of truth.
 - If page context is provided, use it, but do not claim to have deeper site data than the context contains.
 - Do not mention internal tool calls unless the user asks.`;
@@ -190,7 +192,7 @@ function localFallback(userMessage, pageContext) {
   ].join("\n");
 }
 
-export async function runAgentTurn({ messages, userMessage, pageContext, onEvent }) {
+export async function runAgentTurn({ messages, userMessage, pageContext, activeTabId, onEvent }) {
   const config = await getAgentConfig();
   const toolTraces = [];
 
@@ -251,6 +253,7 @@ export async function runAgentTurn({ messages, userMessage, pageContext, onEvent
 
         try {
           const result = await executeAgentTool(toolUse.name, toolUse.input || {}, {
+            activeTabId,
             tinyfishApiKey: config.tinyfishApiKey
           });
 

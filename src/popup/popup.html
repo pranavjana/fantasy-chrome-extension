@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fantasy Agent</title>
+    <link rel="stylesheet" href="./popup.css">
+  </head>
+  <body>
+    <main class="shell">
+      <div class="brand-banner">
+        <div class="brand-lockup">
+          <img src="../../tinyfishsoccer.png" alt="Tinyfish Soccer">
+          <div>
+            <div class="brand-title">Tinyfish Soccer</div>
+            <div class="brand-subtitle" id="tool-status">Ready</div>
+          </div>
+        </div>
+        <div class="banner-actions">
+          <button class="icon-button" id="clear-chat" title="Clear chat" type="button" aria-label="Clear chat">↺</button>
+          <details class="settings settings-menu">
+            <summary title="Settings" aria-label="Settings">⚙</summary>
+            <form id="settings-form">
+              <label>
+                Anthropic API key
+                <input id="anthropic-key" autocomplete="off" type="password">
+              </label>
+              <label>
+                Anthropic model
+                <input id="anthropic-model" autocomplete="off" type="text">
+              </label>
+              <label>
+                Tinyfish API key
+                <input id="tinyfish-key" autocomplete="off" type="password">
+              </label>
+              <button type="submit">Save settings</button>
+              <p id="settings-status"></p>
+            </form>
+          </details>
+        </div>
+      </div>
+
+      <section class="messages" id="messages"></section>
+
+      <div class="composer-wrap">
+        <form class="composer" id="chat-form">
+          <textarea id="chat-input" placeholder="What should we research?" rows="3"></textarea>
+          <div class="composer-footer">
+            <button class="ghost-button" type="button">Tools enabled</button>
+            <button class="send-button" id="send-button" type="submit" aria-label="Send">↑</button>
+          </div>
+        </form>
+      </div>
+
+    </main>
+    <script src="./popup.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Fantasy Agent Harness",
+  "description": "Chrome extension shell for the fantasy copilot agent harness.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "Fantasy Agent"
+  },
+  "side_panel": {
+    "default_path": "src/popup/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://api.search.tinyfish.ai/*",
+    "https://api.fetch.tinyfish.ai/*",
+    "https://play.fifa.com/json/fantasy/*"
+  ],
+  "permissions": ["activeTab", "sidePanel", "storage", "tabs"]
+}

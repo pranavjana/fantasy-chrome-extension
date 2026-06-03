@@ -436,8 +436,11 @@ button:disabled {
 }
 
 .settings-heading {
-  display: grid;
-  gap: 2px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding-bottom: 2px;
 }
 
@@ -447,10 +450,48 @@ button:disabled {
   line-height: 1.2;
 }
 
-.settings-heading span {
+.privacy-info {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
   color: var(--faint);
+  cursor: help;
   font-size: 11px;
-  line-height: 1.35;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.privacy-info:hover,
+.privacy-info:focus {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.privacy-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  display: none;
+  width: 260px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgb(24 32 29 / 14%);
+  color: var(--muted);
+  padding: 9px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.privacy-info:hover .privacy-tooltip,
+.privacy-info:focus .privacy-tooltip {
+  display: block;
 }
 
 .settings-field {

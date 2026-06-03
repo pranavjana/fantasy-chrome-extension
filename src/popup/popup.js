@@ -5,8 +5,8 @@ const sendButton = document.querySelector("#send-button");
 const clearButton = document.querySelector("#clear-chat");
 const clearKeysButton = document.querySelector("#clear-keys");
 const settingsForm = document.querySelector("#settings-form");
-const anthropicKey = document.querySelector("#anthropic-key");
-const anthropicModel = document.querySelector("#anthropic-model");
+const openRouterKey = document.querySelector("#openrouter-key");
+const openRouterModel = document.querySelector("#openrouter-model");
 const tinyfishKey = document.querySelector("#tinyfish-key");
 const settingsStatus = document.querySelector("#settings-status");
 const toolStatus = document.querySelector("#tool-status");
@@ -40,7 +40,7 @@ function renderMessages() {
   if (!messages.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "Ask a question to test popup to background agent communication. Configure keys for live Anthropic and Tinyfish calls.";
+    empty.textContent = "Ask a question to test popup to background agent communication. Configure keys for live OpenRouter and Tinyfish calls.";
     messagesEl.append(empty);
     return;
   }
@@ -390,10 +390,10 @@ function sendRuntimeMessage(message) {
 
 async function loadConfigStatus() {
   const config = await sendRuntimeMessage({ type: "GET_AGENT_CONFIG" });
-  if (config?.anthropicModel) {
-    anthropicModel.value = config.anthropicModel;
+  if (config?.openRouterModel) {
+    openRouterModel.value = config.openRouterModel;
   }
-  anthropicKey.placeholder = config?.anthropicApiKey === "configured" ? "Configured" : "";
+  openRouterKey.placeholder = config?.openRouterApiKey === "configured" ? "Configured" : "";
   tinyfishKey.placeholder = config?.tinyfishApiKey === "configured" ? "Configured" : "";
 }
 
@@ -556,8 +556,8 @@ settingsForm.addEventListener("submit", async (event) => {
   settingsStatus.textContent = "";
 
   const config = {
-    anthropicApiKey: anthropicKey.value,
-    anthropicModel: anthropicModel.value,
+    openRouterApiKey: openRouterKey.value,
+    openRouterModel: openRouterModel.value,
     tinyfishApiKey: tinyfishKey.value
   };
 
@@ -571,7 +571,7 @@ settingsForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  anthropicKey.value = "";
+  openRouterKey.value = "";
   tinyfishKey.value = "";
   settingsStatus.textContent = "Saved.";
   await loadConfigStatus();
@@ -586,9 +586,9 @@ clearKeysButton.addEventListener("click", async () => {
     return;
   }
 
-  anthropicKey.value = "";
+  openRouterKey.value = "";
   tinyfishKey.value = "";
-  anthropicKey.placeholder = "";
+  openRouterKey.placeholder = "";
   tinyfishKey.placeholder = "";
   settingsStatus.textContent = "Keys cleared.";
 });

@@ -5,12 +5,12 @@ Basic Manifest V3 extension harness migrated from the `fantasy-world-cup` app sh
 ## What works
 
 - Chrome side panel chat UI sends agent turns to the background service worker.
-- Background owns the agent loop and calls Anthropic directly when an API key is saved.
-- Tinyfish tools are wired into the Anthropic tool loop:
+- Background owns the agent loop and calls OpenRouter directly when an API key is saved.
+- Tinyfish tools are wired into the OpenRouter tool loop:
   - `tinyfish_search`
   - `tinyfish_fetch`
 - Content script can return a lightweight page snapshot now and is the place to add direct fantasy-site player JSON extraction later.
-- If Anthropic is not configured, the popup still proves the communication harness with a local fallback response.
+- If OpenRouter is not configured, the popup still proves the communication harness with a local fallback response.
 
 ## Load in Chrome
 
@@ -24,8 +24,8 @@ Basic Manifest V3 extension harness migrated from the `fantasy-world-cup` app sh
 
 Open the side panel, expand Settings, and save:
 
-- `ANTHROPIC_API_KEY`
-- optional `ANTHROPIC_MODEL`, defaults to `claude-sonnet-4-20250514`
+- `OPENROUTER_API_KEY`
+- optional `OPENROUTER_MODEL`, defaults to `anthropic/claude-3.5-haiku`
 - `TINYFISH_API_KEY`
 
 Keys are stored in `chrome.storage.local` for local development.

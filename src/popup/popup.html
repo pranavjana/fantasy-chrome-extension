@@ -25,16 +25,19 @@
                 <strong>Settings</strong>
                 <span class="privacy-info" tabindex="0" aria-label="Privacy information">
                   i
-                  <span class="privacy-tooltip">Keys are stored locally in Chrome. Chat requests and relevant page context may be sent to Anthropic and Tinyfish to provide responses. Official FIFA fantasy player data is fetched from play.fifa.com and cached locally.</span>
+                  <span class="privacy-tooltip">Keys are stored locally in Chrome. Chat requests and relevant page context may be sent to OpenRouter and Tinyfish to provide responses. Official FIFA fantasy player data is fetched from play.fifa.com and cached locally.</span>
                 </span>
               </div>
               <label class="settings-field">
-                <span>Anthropic API key</span>
-                <input id="anthropic-key" autocomplete="off" type="password">
+                <span class="settings-label-row">
+                  OpenRouter API key
+                  <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">Get key</a>
+                </span>
+                <input id="openrouter-key" autocomplete="off" type="password">
               </label>
               <label class="settings-field">
-                <span>Anthropic model</span>
-                <input id="anthropic-model" autocomplete="off" type="text">
+                <span>OpenRouter model</span>
+                <input id="openrouter-model" autocomplete="off" type="text">
               </label>
               <label class="settings-field">
                 <span class="settings-label-row tinyfish-key-row">

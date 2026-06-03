@@ -164,6 +164,53 @@ function findPlayerActionButton(playerName) {
   return null;
 }
 
+function findPlayerPoolContainer() {
+  const title = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, div, span"))
+    .find((element) => isVisible(element) && element.textContent?.trim().toUpperCase() === "PLAYER POOL");
+
+  let node = title;
+  for (let depth = 0; node && node !== document.body && depth < 8; depth += 1) {
+    if (node.querySelector?.('input[name="search"], input[placeholder*="Search" i]') && node.querySelector?.("button")) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+
+  return closestWithClassToken(title, "sidebar") || document.body;
+}
+
+function getNameTokens(playerName) {
+  return normalizeText(playerName)
+    .split(" ")
+    .map((token) => token.replace(/[^a-z0-9]/g, ""))
+    .filter((token) => token.length >= 3);
+}
+
+function findFirstFilteredPlayerActionButton(playerName) {
+  const container = findPlayerPoolContainer();
+  const nameTokens = getNameTokens(playerName);
+  const candidates = Array.from(container.querySelectorAll("button"))
+    .filter(isVisible)
+    .map((button) => {
+      let row = button.parentElement;
+      for (let depth = 0; row && row !== document.body && depth < 8; depth += 1) {
+        const text = row.textContent || "";
+        const normalizedText = normalizeText(text);
+        const actionButton = findActionColumnButton(row);
+        const hasNameToken = nameTokens.some((token) => normalizedText.includes(token));
+        if (actionButton === button && /\$\d/.test(text) && hasNameToken) {
+          return { row, button };
+        }
+        row = row.parentElement;
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  return candidates
+    .sort((a, b) => a.row.getBoundingClientRect().top - b.row.getBoundingClientRect().top)[0] || null;
+}
+
 function findPlayerSearchInput() {
   return Array.from(document.querySelectorAll('input[name="search"], input[placeholder*="Search" i]'))
     .find(isVisible) || null;
@@ -280,6 +327,20 @@ async function searchPlayerPool(playerName) {
         },
         attempted: true
       };
+    }
+
+    if (normalizeText(input.value) === normalizeText(playerName)) {
+      const filteredAction = findFirstFilteredPlayerActionButton(playerName);
+      if (filteredAction) {
+        return {
+          action: {
+            ...filteredAction,
+            searched: true,
+            usedFirstFilteredResult: true
+          },
+          attempted: true
+        };
+      }
     }
   }
 

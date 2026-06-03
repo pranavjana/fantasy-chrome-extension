@@ -54,31 +54,15 @@ function toOpenRouterTools(tools) {
   }));
 }
 
-function parseToolCallInput(toolCall) {
-  const rawArguments = toolCall?.function?.arguments || "{}";
+function parseToolCallArguments(rawArguments) {
   try {
-    return JSON.parse(rawArguments);
+    return rawArguments ? JSON.parse(rawArguments) : {};
   } catch {
     return {};
   }
 }
 
-function normalizeOpenRouterResponse(payload) {
-  const message = payload?.choices?.[0]?.message || {};
-  return {
-    message,
-    assistantText: String(message.content || "").trim(),
-    toolUses: (message.tool_calls || [])
-      .filter((toolCall) => toolCall?.function?.name)
-      .map((toolCall) => ({
-        id: toolCall.id,
-        name: toolCall.function.name,
-        input: parseToolCallInput(toolCall)
-      }))
-  };
-}
-
-async function openRouterChatCompletion({ config, messages, tools = AGENT_TOOLS, system = buildSystemPrompt() }) {
+async function openRouterChatCompletion({ config, messages, onTextDelta, tools = AGENT_TOOLS, system = buildSystemPrompt() }) {
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -93,6 +77,7 @@ async function openRouterChatCompletion({ config, messages, tools = AGENT_TOOLS,
         { role: "system", content: system },
         ...messages
       ],
+      stream: true,
       ...(tools ? { tools: toOpenRouterTools(tools), parallel_tool_calls: false } : {})
     })
   });
@@ -102,7 +87,100 @@ async function openRouterChatCompletion({ config, messages, tools = AGENT_TOOLS,
     throw new Error(`OpenRouter API failed with status ${response.status}: ${text}`);
   }
 
-  return normalizeOpenRouterResponse(await response.json());
+  return readOpenRouterStream(response, onTextDelta);
+}
+
+async function readOpenRouterStream(response, onTextDelta) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const toolCalls = [];
+  let assistantText = "";
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() || "";
+
+    for (const chunk of chunks) {
+      const dataLines = chunk
+        .split("\n")
+        .filter((line) => line.startsWith("data: "));
+
+      for (const dataLine of dataLines) {
+        const data = dataLine.slice(6).trim();
+        if (!data || data === "[DONE]") {
+          continue;
+        }
+
+        const event = JSON.parse(data);
+        const delta = event?.choices?.[0]?.delta || {};
+
+        if (delta.content) {
+          assistantText += delta.content;
+          onTextDelta?.(delta.content);
+        }
+
+        for (const toolCallDelta of delta.tool_calls || []) {
+          const index = toolCallDelta.index ?? toolCalls.length;
+          toolCalls[index] ||= {
+            id: "",
+            type: "function",
+            function: {
+              name: "",
+              arguments: ""
+            }
+          };
+
+          if (toolCallDelta.id) {
+            toolCalls[index].id = toolCallDelta.id;
+          }
+
+          if (toolCallDelta.type) {
+            toolCalls[index].type = toolCallDelta.type;
+          }
+
+          if (toolCallDelta.function?.name) {
+            toolCalls[index].function.name += toolCallDelta.function.name;
+          }
+
+          if (toolCallDelta.function?.arguments) {
+            toolCalls[index].function.arguments += toolCallDelta.function.arguments;
+          }
+        }
+      }
+    }
+  }
+
+  const normalizedToolCalls = toolCalls
+    .filter((toolCall) => toolCall?.function?.name)
+    .map((toolCall, index) => ({
+      id: toolCall.id || `tool_call_${index}`,
+      type: toolCall.type || "function",
+      function: {
+        name: toolCall.function.name,
+        arguments: toolCall.function.arguments || "{}"
+      }
+    }));
+
+  return {
+    message: {
+      role: "assistant",
+      content: assistantText || null,
+      ...(normalizedToolCalls.length ? { tool_calls: normalizedToolCalls } : {})
+    },
+    assistantText: assistantText.trim(),
+    toolUses: normalizedToolCalls.map((toolCall) => ({
+      id: toolCall.id,
+      name: toolCall.function.name,
+      input: parseToolCallArguments(toolCall.function.arguments)
+    }))
+  };
 }
 
 function buildPageContextMessage(pageContext) {
@@ -154,13 +232,13 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
     onEvent?.({ type: "thinking", label: loopCount === 0 ? "Thinking..." : "Reading tool results..." });
     const response = await openRouterChatCompletion({
       config,
-      messages: conversation.slice(-30)
+      messages: conversation.slice(-30),
+      onTextDelta: (delta) => {
+        onEvent?.({ type: "response_delta", delta });
+      }
     });
 
     assistantText = response.assistantText;
-    if (assistantText) {
-      onEvent?.({ type: "response_delta", delta: assistantText });
-    }
 
     const toolUses = response.toolUses || [];
     if (!toolUses.length) {
@@ -288,13 +366,13 @@ Rules:
 - Use FIFA player cache tool results as the source of truth for fantasy prices, positions, player status, ownership, points, and raw player fields.
 - Use Tinyfish tool results as real-world context for news, injuries, lineup hints, form narratives, and confidence.
 - Combine both sources when making recommendations.
-- Keep it concise and actionable.`
+- Keep it concise and actionable.`,
+      onTextDelta: (delta) => {
+        onEvent?.({ type: "response_delta", delta });
+      }
     });
 
     assistantText = finalResponse.assistantText;
-    if (assistantText) {
-      onEvent?.({ type: "response_delta", delta: assistantText });
-    }
   }
 
   return {

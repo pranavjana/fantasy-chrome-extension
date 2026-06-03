@@ -87,7 +87,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "add_fantasy_player",
-    description: "Add a FIFA World Cup Fantasy player on the active browser tab. If position is provided and the player list is not open, first click an empty slot for that position, then search the player list by scrolling and click the player's add button. Only use this after the user explicitly asks to change their team.",
+    description: "Add a FIFA World Cup Fantasy player on the active browser tab. If position is provided and the player list is not open, first click an empty slot for that position, then use the player-pool search field and click the player's add button. Does not scroll the player list. Only use this after the user explicitly asks to change their team.",
     input_schema: {
       type: "object",
       properties: {

@@ -257,64 +257,50 @@ input {
 
 .tool-card {
   display: flex;
-  align-items: center;
-  gap: 9px;
+  align-items: baseline;
+  gap: 6px;
   max-width: 100%;
   align-self: flex-start;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--ink);
-  padding: 8px 9px;
+  color: var(--muted);
+  padding: 1px 2px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .tool-card.running {
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
-  background: var(--accent-soft);
+  color: var(--faint);
 }
 
 .tool-card.error {
-  border-color: #efcfca;
-  background: #fff7f6;
   color: var(--bad);
 }
 
-.tool-icon {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.tool-card.error .tool-icon {
-  background: var(--bad);
-}
-
-.tool-body {
-  min-width: 0;
-}
-
 .tool-title {
+  min-width: 0;
   overflow: hidden;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.2;
+  color: inherit;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.tool-title::before {
+  content: "↳ ";
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.tool-title::after {
+  content: "·";
+  margin-left: 6px;
+  color: var(--faint);
+  font-weight: 400;
+}
+
 .tool-meta {
+  min-width: 0;
   overflow: hidden;
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.25;
+  color: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -331,12 +317,16 @@ input {
 }
 
 .composer {
-  display: grid;
-  gap: 8px;
+  position: relative;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--panel);
-  padding: 9px;
+  padding: 10px 46px 10px 12px;
+}
+
+.composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(13 124 102 / 10%);
 }
 
 textarea,
@@ -355,7 +345,7 @@ textarea {
   resize: vertical;
   border: 0;
   overflow: hidden;
-  padding: 2px 3px;
+  padding: 0;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -369,28 +359,15 @@ input {
   font-size: 12px;
 }
 
-textarea:focus,
 input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgb(13 124 102 / 12%);
 }
 
 .composer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.ghost-button {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel-soft);
-  color: var(--muted);
-  cursor: default;
-  padding: 5px 7px;
-  font-size: 11px;
-  font-weight: 600;
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
 }
 
 .send-button {
@@ -445,7 +422,7 @@ button:disabled {
 
 .settings form {
   display: grid;
-  gap: 9px;
+  gap: 11px;
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
@@ -458,12 +435,88 @@ button:disabled {
   box-shadow: 0 18px 48px rgb(24 32 29 / 12%);
 }
 
-.settings label {
+.settings-heading {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 2px;
+}
+
+.settings-heading strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.settings-heading span {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.settings-field {
   display: grid;
   gap: 5px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.settings-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-label-row a {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-label-row a:hover {
+  text-decoration: underline;
+}
+
+.tinyfish-key-row {
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 22%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-2) 7%, var(--panel));
+  padding: 7px;
+}
+
+.tinyfish-key-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.tinyfish-key-title img {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  object-fit: contain;
+}
+
+.tinyfish-key-row a {
+  border-radius: 999px;
+  background: var(--accent-2);
+  color: #ffffff;
+  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tinyfish-key-row a:hover {
+  background: #bd4f2a;
+  text-decoration: none;
 }
 
 .settings button {

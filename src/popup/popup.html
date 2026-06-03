@@ -12,7 +12,7 @@
         <div class="brand-lockup">
           <img src="../../tinyfishsoccer.png" alt="Tinyfish Soccer">
           <div>
-            <div class="brand-title">Tinyfish Soccer</div>
+            <div class="brand-title">TinyFish Fantasy World Cup Companion</div>
             <div class="brand-subtitle" id="tool-status">Ready</div>
           </div>
         </div>
@@ -21,16 +21,26 @@
           <details class="settings settings-menu">
             <summary title="Settings" aria-label="Settings">⚙</summary>
             <form id="settings-form">
-              <label>
-                Anthropic API key
+              <div class="settings-heading">
+                <strong>Settings</strong>
+                <span>Keys are stored locally in Chrome.</span>
+              </div>
+              <label class="settings-field">
+                <span>Anthropic API key</span>
                 <input id="anthropic-key" autocomplete="off" type="password">
               </label>
-              <label>
-                Anthropic model
+              <label class="settings-field">
+                <span>Anthropic model</span>
                 <input id="anthropic-model" autocomplete="off" type="text">
               </label>
-              <label>
-                Tinyfish API key
+              <label class="settings-field">
+                <span class="settings-label-row tinyfish-key-row">
+                  <span class="tinyfish-key-title">
+                    <img src="../../tinyfishsoccer.png" alt="">
+                    Tinyfish API key
+                  </span>
+                  <a href="https://agent.tinyfish.ai/api-keys" target="_blank" rel="noreferrer">Get API key</a>
+                </span>
                 <input id="tinyfish-key" autocomplete="off" type="password">
               </label>
               <button type="submit">Save settings</button>
@@ -46,7 +56,6 @@
         <form class="composer" id="chat-form">
           <textarea id="chat-input" placeholder="What should we research?" rows="3"></textarea>
           <div class="composer-footer">
-            <button class="ghost-button" type="button">Tools enabled</button>
             <button class="send-button" id="send-button" type="submit" aria-label="Send">↑</button>
           </div>
         </form>

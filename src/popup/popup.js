@@ -123,6 +123,18 @@ function clearAssistantStream() {
   }
 }
 
+function commitAssistantStream() {
+  flushAssistantDelta();
+  const content = liveAssistantText.trim();
+  if (!content) {
+    clearAssistantStream();
+    return;
+  }
+
+  messages = [...messages, createMessage("assistant", content)];
+  clearAssistantStream();
+}
+
 function appendInlineMarkdown(parent, text) {
   const pattern = /(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let cursor = 0;
@@ -349,13 +361,6 @@ function renderToolCard(trace) {
   const toolCard = document.createElement("div");
   toolCard.className = `tool-card${trace.isError ? " error" : ""}${trace.status === "running" ? " running" : ""}`;
 
-  const icon = document.createElement("div");
-  icon.className = "tool-icon";
-  icon.textContent = trace.isError ? "!" : trace.status === "running" ? "..." : "T";
-
-  const body = document.createElement("div");
-  body.className = "tool-body";
-
   const title = document.createElement("div");
   title.className = "tool-title";
   title.textContent = trace.name;
@@ -364,8 +369,7 @@ function renderToolCard(trace) {
   meta.className = "tool-meta";
   meta.textContent = formatToolMeta(trace);
 
-  body.append(title, meta);
-  toolCard.append(icon, body);
+  toolCard.append(title, meta);
   return toolCard;
 }
 
@@ -450,7 +454,7 @@ chatForm.addEventListener("submit", async (event) => {
           }
         }
       ];
-      toolStatus.textContent = `Using ${eventMessage.trace.name}`;
+      toolStatus.textContent = "Working";
       renderMessages();
       return;
     }
@@ -463,7 +467,7 @@ chatForm.addEventListener("submit", async (event) => {
     }
 
     if (eventMessage.type === "response_reset") {
-      clearAssistantStream();
+      commitAssistantStream();
       renderMessages();
       return;
     }
@@ -496,9 +500,7 @@ chatForm.addEventListener("submit", async (event) => {
       ];
       liveEvents = [];
       clearAssistantStream();
-      toolStatus.textContent = completedToolEvents.length
-        ? `Used ${completedToolEvents.map((item) => item.trace.name).join(", ")}`
-        : "No tools used";
+      toolStatus.textContent = "Ready";
       sendButton.disabled = false;
       sendButton.textContent = "↑";
       renderMessages();

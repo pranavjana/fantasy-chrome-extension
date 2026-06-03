@@ -1,6 +1,8 @@
 import { getAgentConfig } from "./config.js";
 import { AGENT_TOOLS, executeAgentTool } from "./tools.js";
 
+const MAX_TOOL_ROUNDS = 10;
+
 const SYSTEM_PROMPT = `You are a fantasy football browser copilot running inside a Chrome extension.
 
 Rules:
@@ -214,7 +216,7 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
   let assistantText = "";
   let endedWithToolUse = false;
 
-  for (let loopCount = 0; loopCount < 5; loopCount += 1) {
+  for (let loopCount = 0; loopCount < MAX_TOOL_ROUNDS; loopCount += 1) {
     onEvent?.({ type: "thinking", label: loopCount === 0 ? "Thinking..." : "Reading tool results..." });
     const response = await anthropicMessagesCreate({
       config,
@@ -242,82 +244,103 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
       }
     ];
 
-    const toolResults = await Promise.all(
-      toolUses.map(async (toolUse) => {
+    const runToolUse = async (toolUse) => {
+      onEvent?.({
+        type: "tool_start",
+        trace: {
+          id: toolUse.id,
+          name: toolUse.name,
+          input: toolUse.input || {}
+        }
+      });
+
+      try {
+        const result = await executeAgentTool(toolUse.name, toolUse.input || {}, {
+          activeTabId,
+          tinyfishApiKey: config.tinyfishApiKey
+        });
+
+        toolTraces.push({
+          name: toolUse.name,
+          input: toolUse.input || {},
+          result
+        });
+
         onEvent?.({
-          type: "tool_start",
+          type: "tool_done",
           trace: {
             id: toolUse.id,
             name: toolUse.name,
-            input: toolUse.input || {}
+            input: toolUse.input || {},
+            result
           }
         });
 
-        try {
-          const result = await executeAgentTool(toolUse.name, toolUse.input || {}, {
-            activeTabId,
-            tinyfishApiKey: config.tinyfishApiKey
-          });
+        return {
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: JSON.stringify(result)
+        };
+      } catch (error) {
+        const result = {
+          error: error instanceof Error ? error.message : "Tool execution failed"
+        };
 
-          toolTraces.push({
-            name: toolUse.name,
-            input: toolUse.input || {},
-            result
-          });
+        toolTraces.push({
+          name: toolUse.name,
+          input: toolUse.input || {},
+          result,
+          isError: true
+        });
 
-          onEvent?.({
-            type: "tool_done",
-            trace: {
-              id: toolUse.id,
-              name: toolUse.name,
-              input: toolUse.input || {},
-              result
-            }
-          });
-
-          return {
-            type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: JSON.stringify(result)
-          };
-        } catch (error) {
-          const result = {
-            error: error instanceof Error ? error.message : "Tool execution failed"
-          };
-
-          toolTraces.push({
+        onEvent?.({
+          type: "tool_done",
+          trace: {
+            id: toolUse.id,
             name: toolUse.name,
             input: toolUse.input || {},
             result,
             isError: true
-          });
+          }
+        });
 
-          onEvent?.({
-            type: "tool_done",
-            trace: {
-              id: toolUse.id,
-              name: toolUse.name,
-              input: toolUse.input || {},
-              result,
-              isError: true
-            }
-          });
+        return {
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: JSON.stringify(result),
+          is_error: true
+        };
+      }
+    };
 
-          return {
-            type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: JSON.stringify(result),
-            is_error: true
-          };
-        }
-      })
-    );
+    const toolResults = new Array(toolUses.length);
+    const nonMutationToolPromises = [];
+    const addPlayerToolUses = [];
+
+    toolUses.forEach((toolUse, index) => {
+      if (toolUse.name === "add_fantasy_player") {
+        addPlayerToolUses.push({ toolUse, index });
+        return;
+      }
+
+      nonMutationToolPromises.push(
+        runToolUse(toolUse).then((result) => {
+          toolResults[index] = result;
+        })
+      );
+    });
+
+    await Promise.all(nonMutationToolPromises);
+
+    for (const { toolUse, index } of addPlayerToolUses) {
+      toolResults[index] = await runToolUse(toolUse);
+    }
 
     conversation = [
       ...conversation,
       {
         role: "user",
-        content: toolResults
+        content: toolResults.filter(Boolean)
       }
     ];
   }

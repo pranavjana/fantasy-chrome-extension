@@ -1,3 +1,10 @@
+(function () {
+if (globalThis.__tinyfishFantasyContentScriptLoaded) {
+  return;
+}
+
+globalThis.__tinyfishFantasyContentScriptLoaded = true;
+
 function findJsonScriptPayloads() {
   return Array.from(document.querySelectorAll('script[type="application/json"], script#__NEXT_DATA__'))
     .map((script, index) => {
@@ -101,6 +108,18 @@ function hasClassToken(element, token) {
   return Array.from(element?.classList || []).includes(token);
 }
 
+function closestWithClassToken(element, token) {
+  let node = element;
+  while (node && node !== document.body) {
+    if (hasClassToken(node, token)) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+
+  return null;
+}
+
 function findActionColumnButton(row) {
   const actionChild = Array.from(row.children)
     .find((child) => hasClassToken(child, "action"));
@@ -145,96 +164,126 @@ function findPlayerActionButton(playerName) {
   return null;
 }
 
-function getScrollTop(container) {
-  if (container === document.scrollingElement) {
-    return window.scrollY;
-  }
-
-  return container.scrollTop;
+function findPlayerSearchInput() {
+  return Array.from(document.querySelectorAll('input[name="search"], input[placeholder*="Search" i]'))
+    .find(isVisible) || null;
 }
 
-function setScrollTop(container, value) {
-  if (container === document.scrollingElement) {
-    window.scrollTo({ top: value, behavior: "instant" });
-    return;
-  }
+function setNativeInputValue(input, value) {
+  const valueSetter = Object.getOwnPropertyDescriptor(input, "value")?.set;
+  const prototype = Object.getPrototypeOf(input);
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
 
-  container.scrollTop = value;
+  if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
+    prototypeValueSetter.call(input, value);
+  } else if (valueSetter) {
+    valueSetter.call(input, value);
+  } else {
+    input.value = value;
+  }
 }
 
-function findScrollablePlayerContainers() {
-  const candidates = [
-    document.scrollingElement,
-    ...Array.from(document.querySelectorAll("*"))
-  ].filter((element) => {
-    if (!element || !isVisible(element)) {
+function dispatchInputEvents(input) {
+  input.dispatchEvent(new InputEvent("input", {
+    bubbles: true,
+    inputType: "insertText",
+    data: input.value
+  }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function findFilterButton() {
+  const playerPoolButtons = Array.from(document.querySelectorAll("button"))
+    .filter(isVisible)
+    .filter((button) => button.querySelector("svg.active, svg[width='32'][height='32']"))
+    .filter((button) => {
+      const sidebar = closestWithClassToken(button, "sidebar");
+      if (sidebar?.textContent?.includes("PLAYER POOL")) {
+        return true;
+      }
+
+      let node = button.parentElement;
+      for (let depth = 0; node && node !== document.body && depth < 8; depth += 1) {
+        if (node.textContent?.includes("PLAYER POOL")) {
+          return true;
+        }
+        node = node.parentElement;
+      }
+
       return false;
-    }
+    });
 
-    return element.scrollHeight > element.clientHeight + 80;
-  });
-
-  return candidates
-    .map((element) => {
-      const text = element.textContent || "";
-      const rect = element.getBoundingClientRect();
-      const visibleButtonCount = Array.from(element.querySelectorAll("button")).filter(isVisible).length;
-      let score = 0;
-
-      if (text.includes("Player") && text.includes("Price") && text.includes("Action")) {
-        score += 100;
-      }
-
-      if (visibleButtonCount >= 3) {
-        score += 30;
-      }
-
-      if (rect.right > window.innerWidth * 0.55) {
-        score += 20;
-      }
-
-      score += Math.min(20, visibleButtonCount);
-      score += Math.min(20, Math.floor((element.scrollHeight - element.clientHeight) / 200));
-
-      return { element, score };
-    })
-    .sort((a, b) => b.score - a.score)
-    .map((candidate) => candidate.element)
-    .slice(0, 5);
-}
-
-async function findPlayerActionButtonWithScrolling(playerName) {
-  const visibleAction = findPlayerActionButton(playerName);
-  if (visibleAction) {
-    return { ...visibleAction, scrolled: false };
+  if (playerPoolButtons.length) {
+    return playerPoolButtons
+      .sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        return (aRect.top - bRect.top) || (aRect.left - bRect.left);
+      })[0];
   }
 
-  for (const container of findScrollablePlayerContainers()) {
-    const originalTop = getScrollTop(container);
-    setScrollTop(container, 0);
-    await sleep(150);
+  const playerPoolTitle = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, div, span"))
+    .find((element) => isVisible(element) && element.textContent?.trim().toUpperCase() === "PLAYER POOL");
 
-    for (let attempt = 0; attempt < 45; attempt += 1) {
-      const playerAction = findPlayerActionButton(playerName);
-      if (playerAction) {
-        return { ...playerAction, scrolled: true };
-      }
-
-      const before = getScrollTop(container);
-      const step = Math.max(220, Math.floor(container.clientHeight * 0.75));
-      setScrollTop(container, before + step);
-      await sleep(150);
-
-      if (getScrollTop(container) === before) {
-        break;
-      }
+  let header = playerPoolTitle;
+  for (let depth = 0; header && header !== document.body && depth < 5; depth += 1) {
+    const buttons = Array.from(header.querySelectorAll("button")).filter(isVisible);
+    if (buttons.length) {
+      return buttons
+        .sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
     }
 
-    setScrollTop(container, originalTop);
-    await sleep(100);
+    header = header.parentElement;
   }
 
   return null;
+}
+
+async function ensurePlayerSearchOpen() {
+  let input = findPlayerSearchInput();
+  if (input) {
+    return input;
+  }
+
+  const filterButton = findFilterButton();
+  if (filterButton) {
+    filterButton.click();
+    await sleep(350);
+    input = findPlayerSearchInput();
+  }
+
+  return input;
+}
+
+async function searchPlayerPool(playerName) {
+  const input = await ensurePlayerSearchOpen();
+  if (!input) {
+    return { action: null, attempted: false };
+  }
+
+  input.focus();
+  setNativeInputValue(input, "");
+  dispatchInputEvents(input);
+  await sleep(100);
+
+  setNativeInputValue(input, playerName);
+  dispatchInputEvents(input);
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await sleep(250);
+    const playerAction = findPlayerActionButton(playerName);
+    if (playerAction) {
+      return {
+        action: {
+          ...playerAction,
+          searched: true
+        },
+        attempted: true
+      };
+    }
+  }
+
+  return { action: null, attempted: true };
 }
 
 async function addFantasyPlayer({ playerName, position }) {
@@ -245,7 +294,7 @@ async function addFantasyPlayer({ playerName, position }) {
     throw new Error("playerName is required.");
   }
 
-  let playerAction = await findPlayerActionButtonWithScrolling(cleanPlayerName);
+  let playerAction = findPlayerActionButton(cleanPlayerName);
   let openedPosition = false;
 
   if (!playerAction && cleanPosition) {
@@ -257,15 +306,21 @@ async function addFantasyPlayer({ playerName, position }) {
     slot.button.click();
     openedPosition = true;
     await sleep(600);
-    playerAction = await findPlayerActionButtonWithScrolling(cleanPlayerName);
   }
 
   if (!playerAction) {
-    throw new Error(`Could not find ${cleanPlayerName} in the player list after scrolling. Open the correct position list or adjust filters so the player is available.`);
+    const searchResult = await searchPlayerPool(cleanPlayerName);
+    playerAction = searchResult.action;
+
+    if (!playerAction && searchResult.attempted) {
+      throw new Error(`Could not find ${cleanPlayerName} after searching the player pool. Open the correct position list or adjust filters so the player is available.`);
+    }
   }
 
-  playerAction.button.scrollIntoView({ block: "center", inline: "center" });
-  await sleep(100);
+  if (!playerAction) {
+    throw new Error(`Could not find ${cleanPlayerName}. The player-pool search field was not available, and scrolling fallback is disabled.`);
+  }
+
   playerAction.button.click();
 
   return {
@@ -273,7 +328,7 @@ async function addFantasyPlayer({ playerName, position }) {
     playerName: cleanPlayerName,
     position: cleanPosition || null,
     openedPosition,
-    scrolled: Boolean(playerAction.scrolled),
+    searched: Boolean(playerAction.searched),
     message: `Clicked add for ${cleanPlayerName}.`
   };
 }
@@ -294,3 +349,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 });
+}());

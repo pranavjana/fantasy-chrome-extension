@@ -23,3 +23,7 @@ export async function saveAgentConfig(config) {
     tinyfishApiKey: String(config.tinyfishApiKey || "").trim() || current.tinyfishApiKey
   });
 }
+
+export async function clearAgentKeys() {
+  await chrome.storage.local.remove(["anthropicApiKey", "tinyfishApiKey"]);
+}

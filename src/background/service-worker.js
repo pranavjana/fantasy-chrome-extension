@@ -1,5 +1,5 @@
 import { runAgentTurn } from "./agent.js";
-import { getAgentConfig, saveAgentConfig } from "./config.js";
+import { clearAgentKeys, getAgentConfig, saveAgentConfig } from "./config.js";
 import { getFifaPlayersCache, refreshFifaPlayersCache } from "./fifa-player-cache.js";
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -46,6 +46,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "SAVE_AGENT_CONFIG") {
     saveAgentConfig(message.config || {})
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "CLEAR_AGENT_KEYS") {
+    clearAgentKeys()
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ error: error.message }));
     return true;

@@ -3,6 +3,7 @@ const chatForm = document.querySelector("#chat-form");
 const chatInput = document.querySelector("#chat-input");
 const sendButton = document.querySelector("#send-button");
 const clearButton = document.querySelector("#clear-chat");
+const clearKeysButton = document.querySelector("#clear-keys");
 const settingsForm = document.querySelector("#settings-form");
 const anthropicKey = document.querySelector("#anthropic-key");
 const anthropicModel = document.querySelector("#anthropic-model");
@@ -574,6 +575,22 @@ settingsForm.addEventListener("submit", async (event) => {
   tinyfishKey.value = "";
   settingsStatus.textContent = "Saved.";
   await loadConfigStatus();
+});
+
+clearKeysButton.addEventListener("click", async () => {
+  settingsStatus.textContent = "";
+  const response = await sendRuntimeMessage({ type: "CLEAR_AGENT_KEYS" });
+
+  if (response?.error) {
+    settingsStatus.textContent = response.error;
+    return;
+  }
+
+  anthropicKey.value = "";
+  tinyfishKey.value = "";
+  anthropicKey.placeholder = "";
+  tinyfishKey.placeholder = "";
+  settingsStatus.textContent = "Keys cleared.";
 });
 
 await loadMessages();

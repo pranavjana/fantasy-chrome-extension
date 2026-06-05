@@ -1,4 +1,5 @@
 import { getAgentConfig } from "./config.js";
+import { FANTASY_WORLD_CUP_CONTEXT } from "./fantasy-context.js";
 import { AGENT_TOOLS, executeAgentTool } from "./tools.js";
 
 const MAX_TOOL_ROUNDS = 20;
@@ -18,7 +19,9 @@ Rules:
 - Treat tool results as the factual source of truth.
 - If page context is provided, use it, but do not claim to have deeper site data than the context contains.
 - Do not end advice with "if you want" offers to do required research. Do the required FIFA and Tinyfish research before answering, or state that the needed source is unavailable.
-- Do not mention internal tool calls unless the user asks.`;
+- Do not mention internal tool calls unless the user asks.
+
+${FANTASY_WORLD_CUP_CONTEXT}`;
 
 function buildSystemPrompt() {
   const now = new Date();

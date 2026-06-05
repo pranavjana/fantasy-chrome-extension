@@ -47,7 +47,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "search_fifa_players",
-    description: "Search the locally cached official FIFA fantasy player data for pricing, position, team, status, ownership, points, and raw player fields. Use this before answering questions about player prices or official fantasy data.",
+    description: "Search the locally cached official FIFA fantasy player data for pricing, position, team/squad, status, ownership, points, and raw player fields. Use this before answering questions about player prices or official fantasy data. For country-position requests like France defenders, pass team \"France\" and position \"DEF\" instead of putting the whole phrase in query.",
     input_schema: {
       type: "object",
       properties: {

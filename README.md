@@ -11,6 +11,7 @@ Basic Manifest V3 extension harness migrated from the `fantasy-world-cup` app sh
   - `tinyfish_fetch`
 - Content script can return a lightweight page snapshot now and is the place to add direct fantasy-site player JSON extraction later.
 - If the selected model provider is not configured, the popup still proves the communication harness with a local fallback response.
+- Agent prompt includes internal Fantasy World Cup skill context for scoring, transfers, captaincy, substitutions, boosters, squad constraints, and source-of-truth policy. See `docs/fantasy-world-cup-skill/`.
 
 ## Load in Chrome
 

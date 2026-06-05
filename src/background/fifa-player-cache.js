@@ -1,7 +1,8 @@
 const PLAYERS_URL = "https://play.fifa.com/json/fantasy/players.json";
+const SQUADS_URL = "https://play.fifa.com/json/fantasy/squads.json";
 const STORAGE_KEY = "fifaPlayersCache";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const CACHE_SCHEMA_VERSION = 2;
+const CACHE_SCHEMA_VERSION = 3;
 
 function normalizeText(value) {
   return String(value || "")
@@ -44,8 +45,11 @@ function buildPlayerSearchText(player) {
   return normalizeText([
     player.name,
     player.team,
+    player.teamAbbr,
+    player.squadId,
     player.position,
     player.positionGroup,
+    stringifyValue(player.squad),
     stringifyValue(player.raw)
   ].filter(Boolean).join(" "));
 }
@@ -116,6 +120,10 @@ function pickTeam(player) {
   return firstPresent(player, ["teamName", "squadName", "clubName", "team", "country", "nationality"]) || "";
 }
 
+function pickSquadId(player) {
+  return firstPresent(player, ["squadId", "squad_id", "teamId", "team_id", "countryId", "country_id"]);
+}
+
 function pickId(player, index) {
   return firstPresent(player, ["id", "playerId", "element", "code", "uuid"]) || index + 1;
 }
@@ -134,19 +142,44 @@ function extractPlayers(payload) {
   return [];
 }
 
-function normalizePlayer(player, index) {
+function extractSquads(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  for (const key of ["squads", "teams", "countries", "data", "items", "results"]) {
+    if (Array.isArray(payload?.[key])) {
+      return payload[key];
+    }
+  }
+
+  return [];
+}
+
+function buildSquadMap(squadsPayload) {
+  const squads = extractSquads(squadsPayload);
+  return new Map(squads.map((squad) => [String(squad.id), squad]));
+}
+
+function normalizePlayer(player, index, squadMap = new Map()) {
   const position = pickPosition(player);
+  const squadId = pickSquadId(player);
+  const squad = squadId !== null && squadId !== undefined ? squadMap.get(String(squadId)) : null;
+  const team = squad?.name || pickTeam(player);
 
   return {
     id: pickId(player, index),
     name: pickName(player) || `Player ${index + 1}`,
     position,
     positionGroup: canonicalPosition(position),
-    team: pickTeam(player),
+    squadId,
+    team,
+    teamAbbr: squad?.abbr || "",
     price: pickPrice(player),
     status: firstPresent(player, ["status", "availability", "chanceOfPlaying", "injuryStatus"]) || "",
-    totalPoints: parseNumber(firstPresent(player, ["totalPoints", "points", "total_points"])),
+    totalPoints: parseNumber(firstPresent(player, ["totalPoints", "points", "total_points"]) ?? player.stats?.totalPoints),
     selectedBy: parseNumber(firstPresent(player, ["selectedBy", "selected_by_percent", "percentSelected", "ownership"])),
+    squad: squad || null,
     raw: player
   };
 }
@@ -271,27 +304,37 @@ function comparePlayers(sortBy) {
   };
 }
 
-function normalizeCache(payload) {
-  const rawPlayers = extractPlayers(payload);
-  const players = rawPlayers.map(normalizePlayer);
+function normalizeCache(playersPayload, squadsPayload) {
+  const rawPlayers = extractPlayers(playersPayload);
+  const squadMap = buildSquadMap(squadsPayload);
+  const players = rawPlayers.map((player, index) => normalizePlayer(player, index, squadMap));
 
   return {
     schemaVersion: CACHE_SCHEMA_VERSION,
     url: PLAYERS_URL,
+    squadsUrl: SQUADS_URL,
     fetchedAt: new Date().toISOString(),
     count: players.length,
+    squadCount: squadMap.size,
     players
   };
 }
 
-export async function refreshFifaPlayersCache() {
-  const response = await fetch(PLAYERS_URL, { cache: "no-store" });
+async function fetchJson(url, label) {
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`FIFA players fetch failed with status ${response.status}`);
+    throw new Error(`${label} fetch failed with status ${response.status}`);
   }
 
-  const payload = await response.json();
-  const cache = normalizeCache(payload);
+  return response.json();
+}
+
+export async function refreshFifaPlayersCache() {
+  const [playersPayload, squadsPayload] = await Promise.all([
+    fetchJson(PLAYERS_URL, "FIFA players"),
+    fetchJson(SQUADS_URL, "FIFA squads")
+  ]);
+  const cache = normalizeCache(playersPayload, squadsPayload);
   await chrome.storage.local.set({ [STORAGE_KEY]: cache });
   return cache;
 }
@@ -339,7 +382,7 @@ export async function searchFifaPlayers(input) {
         return false;
       }
 
-      if (team && !textMatches(normalizeText(player.team), team)) {
+      if (team && !textMatches(buildPlayerSearchText(player), team)) {
         return false;
       }
 

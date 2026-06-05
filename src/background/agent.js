@@ -23,6 +23,8 @@ Source policy:
 
 Tool workflow:
 - For official fantasy data questions, call search_fifa_players or get_fifa_player before answering.
+- For questions about the user's current team, selected players, remaining budget, missing slots, or page state, call get_current_fantasy_squad before answering.
+- For current squad questions, use the players returned by get_current_fantasy_squad as the current page squad list. It parses the page's raw squad text when available; selectedCount and remainingBudget are the page-state counters.
 - Pass filters explicitly: team, position, minPrice/maxPrice, status, sortBy, limit. Do not bury filters inside one long query string.
 - For normal player lists, rankings, and recommendations, exclude transferred or unavailable players unless the user explicitly asks for them.
 - If a player is not found, try broader spelling/name searches or refresh before concluding. Say only that they were not found in cached fantasy data; do not infer squad omission or real-world unavailability unless a source proves it.
@@ -32,7 +34,8 @@ Tool workflow:
 - Break Tinyfish research into focused searches. Each tinyfish_search query should focus on one topic only: one player, one team, one match, one injury angle, one lineup angle, or one tactical angle. Do not combine many questions or unrelated entities in a single search query.
 - Prefer multiple tinyfish_search calls in the same turn instead of one broad query. As a default: comparisons need at least one search per player plus one shared context search; team news needs separate searches for squad/injuries, lineup/tactics, and fixtures/recent match; full-squad or transfer advice needs focused searches for the most important shortlisted players or teams.
 - If a task is freshness-sensitive and Tinyfish is available, a single tinyfish_search call is usually insufficient unless the user asks a narrow factual question.
-- Use search result titles/snippets as evidence. Fetch only when snippets are insufficient, a claim is high-impact, or a strong source needs confirmation.
+- Search first, fetch second. Before calling tinyfish_fetch for a normal research task, try to answer from multiple targeted tinyfish_search calls and compare snippets. Prefer 2 to 5 focused searches over fetching a page immediately after the first search.
+- Use search result titles/snippets as evidence. Fetch only after the search snippets leave a specific unresolved question, contradict each other, a high-impact claim needs source confirmation, or the user explicitly asks to inspect a URL/source.
 - Do not fetch every search result by default.
 
 Decision workflow:
@@ -50,9 +53,12 @@ Fantasy judgement:
 
 Action safety:
 - Use add_fantasy_player only when the user explicitly asks to add a player or confirms a team change.
+- Use remove_fantasy_player only when the user explicitly asks to remove a selected player or confirms a team change.
 - If the user asks for advice, recommend first and wait for approval before changing the browser page.
 - When adding a player, provide position when known: GK, DEF, MID, or FWD. If the player list is already open and the player is visible, add_fantasy_player can be called with only playerName.
-- After browser actions, report only what the add_fantasy_player tool actually confirmed. Never say all players were added unless every requested add succeeded and the final selected count confirms the expected squad size. If an add fails or the selected count is short, say which player failed and what count was reached.
+- Before adding players to a partially built squad, call get_current_fantasy_squad to understand selected count, remaining budget, and open position needs.
+- Before removing players, call get_current_fantasy_squad to confirm the target is currently selected when practical.
+- After browser actions, report only what the add_fantasy_player or remove_fantasy_player tool actually confirmed. Never say all players were added or removed unless every requested action succeeded and the final selected count confirms the expected squad size. If an action fails or the selected count is unexpected, say which player failed and what count was reached.
 
 Output rules:
 - Keep answers concise but specific.
@@ -573,6 +579,28 @@ function buildPageContextMessage(pageContext) {
   };
 }
 
+function assistantToolMessageOnly(message) {
+  if (!message) {
+    return message;
+  }
+
+  if (Array.isArray(message.content)) {
+    return {
+      ...message,
+      content: message.content.filter((block) => block?.type === "tool_use")
+    };
+  }
+
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length) {
+    return {
+      ...message,
+      content: null
+    };
+  }
+
+  return message;
+}
+
 function summarizeToolTrace(trace) {
   if (trace.isError) {
     return `${trace.name}: ${trace.result?.error || "Tool failed"}`;
@@ -698,7 +726,7 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
 
     conversation = [
       ...conversation,
-      response.message
+      assistantToolMessageOnly(response.message)
     ];
 
     const runToolUse = async (toolUse) => {
@@ -772,11 +800,11 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
 
     const toolResults = new Array(toolUses.length);
     const nonMutationToolPromises = [];
-    const addPlayerToolUses = [];
+    const mutationToolUses = [];
 
     toolUses.forEach((toolUse, index) => {
-      if (toolUse.name === "add_fantasy_player") {
-        addPlayerToolUses.push({ toolUse, index });
+      if (toolUse.name === "add_fantasy_player" || toolUse.name === "remove_fantasy_player") {
+        mutationToolUses.push({ toolUse, index });
         return;
       }
 
@@ -789,7 +817,7 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
 
     await Promise.all(nonMutationToolPromises);
 
-    for (const { toolUse, index } of addPlayerToolUses) {
+    for (const { toolUse, index } of mutationToolUses) {
       toolResults[index] = await runToolUse(toolUse);
     }
 
@@ -827,7 +855,7 @@ Rules:
 - Verify hard constraints before presenting any squad, transfer, captaincy, or lineup recommendation. If the available tool results are insufficient to verify a constraint, state that limitation briefly.
 - For full squads, state total cost, remaining budget, position counts, and any assumption about formation or bench from validate_fifa_squad. Use compact tables and short notes so the full squad fits in one response.
 - If validate_fifa_squad returned invalid, do not call the squad final. Mention the violations or revise from available data.
-- For browser add actions, base success claims only on add_fantasy_player results. If final selected count is less than 15, do not say the full squad was added.
+- For browser add/remove actions, base success claims only on add_fantasy_player and remove_fantasy_player results. If final selected count is less than 15, do not say the full squad was added.
 - For recommendations and comparisons, do not offer real-world context as a follow-up. If Tinyfish results are present, use them now. If they are absent, say the recommendation is based only on available fantasy cache data.
 - Keep it concise and actionable.
 

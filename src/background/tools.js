@@ -88,6 +88,14 @@ export const AGENT_TOOLS = [
     }
   },
   {
+    name: "get_current_fantasy_squad",
+    description: "Read the current FIFA Fantasy squad from the active browser tab. Prefer the page's raw squad text blob to parse name/price pairs, then fall back to selected cards. Returns selected count, remaining budget, parsed players with inferred position order and prices, and source. Use before reviewing the user's current team, before transfer advice based on current squad, and after add/remove actions to verify page state.",
+    input_schema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
     name: "validate_fifa_squad",
     description: "Validate a proposed 15-player FIFA World Cup Fantasy squad against official cached player data. Use this before presenting or adding a full squad. It resolves official player prices/positions/teams, calculates total cost and remaining budget, checks 2 GK/5 DEF/5 MID/3 FWD, country limits, duplicates, unresolved players, and transferred/unavailable statuses.",
     input_schema: {
@@ -133,8 +141,22 @@ export const AGENT_TOOLS = [
     }
   },
   {
+    name: "remove_fantasy_player",
+    description: "Remove a selected FIFA World Cup Fantasy player from the active browser tab. Finds the visible selected squad card by player name, clicks its remove button, and verifies the selected count decreases. Only use this after the user explicitly asks to change their team.",
+    input_schema: {
+      type: "object",
+      properties: {
+        playerName: {
+          type: "string",
+          description: "Visible selected player name to remove, for example Coufal, Lamine Yamal, or Mbappé."
+        }
+      },
+      required: ["playerName"]
+    }
+  },
+  {
     name: "tinyfish_search",
-    description: "Search the live web for fantasy football player news, lineup hints, injuries, pricing notes, and recent reports. Use one focused topic per query only: one player, team, match, injury angle, lineup angle, or tactical angle. Prefer multiple focused searches over one overloaded query, and call this tool more than once for non-trivial research. Use returned titles/snippets as evidence before deciding whether any page needs fetching.",
+    description: "Search the live web for fantasy football player news, lineup hints, injuries, pricing notes, and recent reports. Use one focused topic per query only: one player, team, match, injury angle, lineup angle, or tactical angle. Prefer 2-5 focused searches over one overloaded query, and call this tool more than once for non-trivial research. Use returned titles/snippets as evidence before deciding whether any page needs fetching.",
     input_schema: {
       type: "object",
       properties: {
@@ -146,7 +168,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "tinyfish_fetch",
-    description: "Fetch and summarize specific URLs returned from Tinyfish search. Use this selectively after search, only for the strongest 1-3 URLs when snippets are insufficient, a claim is high-impact, or official/detail confirmation is needed. Do not fetch every search result by default.",
+    description: "Fetch and summarize specific URLs returned from Tinyfish search. Search first, fetch second: for normal research, use multiple focused tinyfish_search calls and compare snippets before fetching. Use this selectively only for the strongest 1-3 URLs when snippets leave a specific unresolved question, snippets conflict, a claim is high-impact, official/detail confirmation is needed, or the user explicitly asks to inspect a source. Do not fetch every search result by default.",
     input_schema: {
       type: "object",
       properties: {
@@ -187,6 +209,22 @@ export async function executeAgentTool(name, input, context) {
     };
   }
 
+  if (name === "get_current_fantasy_squad") {
+    if (!context.activeTabId) {
+      throw new Error("No active tab is available for browser actions.");
+    }
+
+    const result = await sendActiveTabMessage(context.activeTabId, {
+      type: "GET_CURRENT_FANTASY_SQUAD"
+    });
+
+    if (!result?.ok) {
+      throw new Error(result?.error || "Could not read current fantasy squad.");
+    }
+
+    return result;
+  }
+
   if (name === "validate_fifa_squad") {
     return validateFifaSquad(input);
   }
@@ -211,6 +249,29 @@ export async function executeAgentTool(name, input, context) {
 
     if (!result?.ok) {
       throw new Error(result?.error || "Could not add fantasy player.");
+    }
+
+    return result;
+  }
+
+  if (name === "remove_fantasy_player") {
+    const playerName = typeof input.playerName === "string" ? input.playerName.trim() : "";
+
+    if (!playerName) {
+      throw new Error("playerName is required.");
+    }
+
+    if (!context.activeTabId) {
+      throw new Error("No active tab is available for browser actions.");
+    }
+
+    const result = await sendActiveTabMessage(context.activeTabId, {
+      type: "REMOVE_FANTASY_PLAYER",
+      playerName
+    });
+
+    if (!result?.ok) {
+      throw new Error(result?.error || "Could not remove fantasy player.");
     }
 
     return result;

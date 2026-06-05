@@ -439,6 +439,27 @@ function renderMarkdown(markdown) {
   return root;
 }
 
+const TOOL_DISPLAY_NAMES = {
+  refresh_fifa_players: "Refresh FIFA Players",
+  search_fifa_players: "FIFA Player Search",
+  get_fifa_player: "FIFA Player Lookup",
+  get_fifa_players_cache_status: "FIFA Cache Status",
+  get_current_fantasy_squad: "Current Squad",
+  validate_fifa_squad: "Squad Validator",
+  add_fantasy_player: "Add Fantasy Player",
+  remove_fantasy_player: "Remove Fantasy Player",
+  tinyfish_search: "Tinyfish Search",
+  tinyfish_fetch: "Tinyfish Fetch"
+};
+
+function formatToolName(name) {
+  return TOOL_DISPLAY_NAMES[name] || String(name || "Tool")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
 function formatToolMeta(trace) {
   if (trace.status === "running") {
     if (trace.name === "refresh_fifa_players") {
@@ -456,6 +477,22 @@ function formatToolMeta(trace) {
 
     if (trace.name === "get_fifa_players_cache_status") {
       return "Checking local player cache";
+    }
+
+    if (trace.name === "get_current_fantasy_squad") {
+      return "Reading current squad";
+    }
+
+    if (trace.name === "validate_fifa_squad") {
+      return "Checking squad budget and rules";
+    }
+
+    if (trace.name === "add_fantasy_player") {
+      return `Adding ${trace.input?.playerName || "player"}`;
+    }
+
+    if (trace.name === "remove_fantasy_player") {
+      return `Removing ${trace.input?.playerName || "player"}`;
     }
 
     if (trace.name === "tinyfish_search") {
@@ -489,12 +526,37 @@ function formatToolMeta(trace) {
     return `${trace.result?.count ?? 0} FIFA players cached`;
   }
 
+  if (trace.name === "get_current_fantasy_squad") {
+    const selectedCount = trace.result?.selectedCount ?? 0;
+    const parsedCount = trace.result?.parsedPlayerCount ?? trace.result?.visiblePlayerCount ?? 0;
+    const budget = typeof trace.result?.remainingBudget === "number" ? ` · ${trace.result.remainingBudget}m remaining` : "";
+    const source = trace.result?.source === "raw_text" ? " from page text" : "";
+    return `Read ${parsedCount} players${source} · ${selectedCount || parsedCount}/15 selected${budget}`;
+  }
+
+  if (trace.name === "validate_fifa_squad") {
+    if (trace.result?.valid) {
+      return `Valid squad · ${trace.result.totalCost}m spent · ${trace.result.remainingBudget}m remaining`;
+    }
+
+    const count = Array.isArray(trace.result?.violations) ? trace.result.violations.length : 0;
+    return `Invalid squad · ${count} issue${count === 1 ? "" : "s"}`;
+  }
+
   if (trace.name === "search_fifa_players") {
     return `${trace.result?.count ?? 0} result${trace.result?.count === 1 ? "" : "s"} from ${trace.result?.totalCachedPlayers ?? 0} cached players`;
   }
 
   if (trace.name === "get_fifa_player") {
     return trace.result?.player ? `Loaded ${trace.result.player.name}` : "Player not found";
+  }
+
+  if (trace.name === "add_fantasy_player") {
+    return trace.result?.message || "Add action complete";
+  }
+
+  if (trace.name === "remove_fantasy_player") {
+    return trace.result?.message || "Remove action complete";
   }
 
   return "Tool complete";
@@ -513,7 +575,7 @@ function renderToolCard(trace) {
 
   const title = document.createElement("div");
   title.className = "tool-title";
-  title.textContent = trace.name;
+  title.textContent = formatToolName(trace.name);
 
   const meta = document.createElement("div");
   meta.className = "tool-meta";
@@ -652,7 +714,7 @@ chatForm.addEventListener("submit", async (event) => {
     }
 
     if (eventMessage.type === "response_reset") {
-      commitAssistantStream();
+      clearAssistantStream();
       renderMessages();
       return;
     }

@@ -239,6 +239,40 @@ function dispatchInputEvents(input) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function getVisibleText() {
+  return Array.from(document.querySelectorAll("body *"))
+    .filter(isVisible)
+    .map((element) => element.textContent || "")
+    .join("\n");
+}
+
+function getSelectedCount() {
+  const match = getVisibleText().match(/\b(\d{1,2})\s*\/\s*15\s*Selected\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function getRemainingBudget() {
+  const match = getVisibleText().match(/\$?\s*(\d+(?:\.\d+)?)m\s*Budget\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+async function waitForSelectedCountIncrease(beforeCount) {
+  if (typeof beforeCount !== "number") {
+    await sleep(700);
+    return null;
+  }
+
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    await sleep(250);
+    const afterCount = getSelectedCount();
+    if (typeof afterCount === "number" && afterCount > beforeCount) {
+      return afterCount;
+    }
+  }
+
+  return getSelectedCount();
+}
+
 function findFilterButton() {
   const playerPoolButtons = Array.from(document.querySelectorAll("button"))
     .filter(isVisible)
@@ -355,6 +389,8 @@ async function addFantasyPlayer({ playerName, position }) {
     throw new Error("playerName is required.");
   }
 
+  const selectedCountBefore = getSelectedCount();
+  const budgetBefore = getRemainingBudget();
   let playerAction = findPlayerActionButton(cleanPlayerName);
   let openedPosition = false;
 
@@ -383,14 +419,26 @@ async function addFantasyPlayer({ playerName, position }) {
   }
 
   playerAction.button.click();
+  const selectedCountAfter = await waitForSelectedCountIncrease(selectedCountBefore);
+  const budgetAfter = getRemainingBudget();
+
+  if (typeof selectedCountBefore === "number" && selectedCountAfter <= selectedCountBefore) {
+    throw new Error(`Clicked add for ${cleanPlayerName}, but the selected count stayed at ${selectedCountAfter ?? selectedCountBefore}/15. The add likely failed because of budget, position, country-limit, filters, or page state.`);
+  }
 
   return {
     ok: true,
     playerName: cleanPlayerName,
     position: cleanPosition || null,
+    selectedCountBefore,
+    selectedCountAfter,
+    budgetBefore,
+    budgetAfter,
     openedPosition,
     searched: Boolean(playerAction.searched),
-    message: `Clicked add for ${cleanPlayerName}.`
+    message: typeof selectedCountAfter === "number"
+      ? `Added ${cleanPlayerName}; selected count is now ${selectedCountAfter}/15.`
+      : `Clicked add for ${cleanPlayerName}.`
   };
 }
 

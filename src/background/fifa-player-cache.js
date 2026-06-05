@@ -320,6 +320,31 @@ function statusMatches(player, requestedStatus, includeUnavailable) {
   return includeUnavailable || !isDefaultExcludedStatus(status);
 }
 
+function priceToTenths(price) {
+  return typeof price === "number" ? Math.round(price * 10) : null;
+}
+
+function tenthsToPrice(tenths) {
+  return Number((tenths / 10).toFixed(1));
+}
+
+function resolveSquadPlayer(cache, entry) {
+  const playerId = entry?.playerId;
+  const query = normalizeText(entry?.query || entry?.name || entry?.playerName);
+  const requestedPosition = normalizeText(entry?.position);
+
+  const player = cache.players.find((candidate) => String(candidate.id) === String(playerId))
+    || (query ? cache.players.find((candidate) => {
+      if (!textMatches(buildPlayerSearchText(candidate), query)) {
+        return false;
+      }
+
+      return !requestedPosition || positionMatches(candidate, requestedPosition);
+    }) : null);
+
+  return player || null;
+}
+
 function comparePlayers(sortBy) {
   return (left, right) => {
     if (sortBy === "price_asc") {
@@ -464,5 +489,117 @@ export async function getFifaPlayer(input) {
   return {
     fetchedAt: cache.fetchedAt,
     player: player || null
+  };
+}
+
+export async function validateFifaSquad(input) {
+  const cache = await getFifaPlayersCache({ refresh: Boolean(input.refresh) });
+  const budget = typeof input.budget === "number" ? input.budget : 100;
+  const budgetTenths = priceToTenths(budget);
+  const stage = normalizeText(input.stage || "group");
+  const countryLimit = typeof input.countryLimit === "number"
+    ? input.countryLimit
+    : stage.includes("quarter") ? 5
+      : stage.includes("semi") ? 6
+        : stage.includes("final") && !stage.includes("semi") ? 8
+          : 3;
+  const entries = Array.isArray(input.players) ? input.players : [];
+  const resolvedPlayers = [];
+  const unresolved = [];
+  const violations = [];
+  const positionCounts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  const countryCounts = {};
+  const seenIds = new Set();
+  let totalTenths = 0;
+
+  entries.forEach((entry, index) => {
+    const player = resolveSquadPlayer(cache, entry);
+
+    if (!player) {
+      unresolved.push({
+        index,
+        query: entry?.query || entry?.name || entry?.playerName || entry?.playerId || ""
+      });
+      return;
+    }
+
+    const priceTenths = priceToTenths(player.price);
+    if (priceTenths === null) {
+      violations.push(`${player.name} has no official fantasy price.`);
+    } else {
+      totalTenths += priceTenths;
+    }
+
+    if (seenIds.has(String(player.id))) {
+      violations.push(`${player.name} is duplicated.`);
+    }
+    seenIds.add(String(player.id));
+
+    if (isDefaultExcludedStatus(player.status)) {
+      violations.push(`${player.name} has status ${player.status || "unavailable"}.`);
+    }
+
+    const position = player.positionGroup || canonicalPosition(player.position);
+    if (positionCounts[position] !== undefined) {
+      positionCounts[position] += 1;
+    } else {
+      violations.push(`${player.name} has unknown position ${player.position || "unknown"}.`);
+    }
+
+    const country = player.team || player.teamAbbr || "Unknown";
+    countryCounts[country] = (countryCounts[country] || 0) + 1;
+
+    resolvedPlayers.push({
+      inputIndex: index,
+      id: player.id,
+      name: player.name,
+      position,
+      team: player.team,
+      teamAbbr: player.teamAbbr,
+      price: player.price,
+      status: player.status,
+      selectedBy: player.selectedBy
+    });
+  });
+
+  if (entries.length !== 15) {
+    violations.push(`Squad has ${entries.length} submitted player${entries.length === 1 ? "" : "s"}; expected 15.`);
+  }
+
+  const requiredPositions = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
+  for (const [position, required] of Object.entries(requiredPositions)) {
+    if (positionCounts[position] !== required) {
+      violations.push(`${position} count is ${positionCounts[position]}; expected ${required}.`);
+    }
+  }
+
+  for (const [country, count] of Object.entries(countryCounts)) {
+    if (count > countryLimit) {
+      violations.push(`${country} has ${count} players; limit is ${countryLimit}.`);
+    }
+  }
+
+  if (budgetTenths !== null && totalTenths > budgetTenths) {
+    violations.push(`Squad costs ${tenthsToPrice(totalTenths)}m; budget is ${budget.toFixed(1)}m.`);
+  }
+
+  for (const missing of unresolved) {
+    violations.push(`Could not resolve player at slot ${missing.index + 1}: ${missing.query || "empty query"}.`);
+  }
+
+  return {
+    fetchedAt: cache.fetchedAt,
+    budget,
+    totalCost: tenthsToPrice(totalTenths),
+    remainingBudget: tenthsToPrice((budgetTenths ?? 0) - totalTenths),
+    submittedCount: entries.length,
+    resolvedCount: resolvedPlayers.length,
+    positionCounts,
+    countryCounts,
+    countryLimit,
+    valid: violations.length === 0,
+    violations,
+    unresolved,
+    players: resolvedPlayers
   };
 }

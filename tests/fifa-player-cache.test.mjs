@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 const cache = {
   schemaVersion: 4,
   fetchedAt: new Date().toISOString(),
-  count: 9,
+  count: 20,
   players: [
     {
       id: 1,
@@ -112,6 +112,114 @@ const cache = {
       status: "Playing",
       selectedBy: 1,
       raw: { price: 66 }
+    },
+    {
+      id: 13,
+      name: "Bench Goalkeeper",
+      position: "GK",
+      positionGroup: "GK",
+      team: "Japan",
+      teamAbbr: "JPN",
+      price: 4,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 14,
+      name: "Budget Defender One",
+      position: "DEF",
+      positionGroup: "DEF",
+      team: "USA",
+      teamAbbr: "USA",
+      price: 4,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 15,
+      name: "Budget Defender Two",
+      position: "DEF",
+      positionGroup: "DEF",
+      team: "Mexico",
+      teamAbbr: "MEX",
+      price: 4,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 16,
+      name: "Budget Defender Three",
+      position: "DEF",
+      positionGroup: "DEF",
+      team: "Canada",
+      teamAbbr: "CAN",
+      price: 4,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 17,
+      name: "Budget Midfielder One",
+      position: "MID",
+      positionGroup: "MID",
+      team: "USA",
+      teamAbbr: "USA",
+      price: 5,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 18,
+      name: "Budget Midfielder Two",
+      position: "MID",
+      positionGroup: "MID",
+      team: "Mexico",
+      teamAbbr: "MEX",
+      price: 5,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 19,
+      name: "Budget Forward One",
+      position: "FWD",
+      positionGroup: "FWD",
+      team: "USA",
+      teamAbbr: "USA",
+      price: 6,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 20,
+      name: "Budget Forward Two",
+      position: "FWD",
+      positionGroup: "FWD",
+      team: "Mexico",
+      teamAbbr: "MEX",
+      price: 6,
+      status: "Playing",
+      selectedBy: 1,
+      raw: {}
+    },
+    {
+      id: 21,
+      name: "Premium Forward",
+      position: "FWD",
+      positionGroup: "FWD",
+      team: "Brazil",
+      teamAbbr: "BRA",
+      price: 10,
+      status: "Playing",
+      selectedBy: 30,
+      raw: {}
     }
   ]
 };
@@ -144,7 +252,7 @@ globalThis.fetch = async (url) => ({
   }
 });
 
-const { getFifaPlayer, refreshFifaPlayersCache, searchFifaPlayers } = await import("../src/background/fifa-player-cache.js");
+const { getFifaPlayer, refreshFifaPlayersCache, searchFifaPlayers, validateFifaSquad } = await import("../src/background/fifa-player-cache.js");
 
 async function namesFor(input) {
   const result = await searchFifaPlayers({ limit: 20, ...input });
@@ -200,5 +308,59 @@ const refreshed = await refreshFifaPlayersCache();
 assert.equal(refreshed.players.find((player) => player.name === "Raw Price 66")?.price, 6.6);
 assert.equal(refreshed.players.find((player) => player.name === "Raw Price 500")?.price, 5);
 assert.equal(refreshed.players.find((player) => player.name === "String Price")?.price, 7.5);
+
+storedCache = cache;
+
+const validSquad = await validateFifaSquad({
+  budget: 100,
+  players: [
+    { name: "David Raya", position: "GK" },
+    { name: "Bench Goalkeeper", position: "GK" },
+    { name: "Nicolas Otamendi", position: "DEF" },
+    { name: "Eric Garcia", position: "DEF" },
+    { name: "Budget Defender One", position: "DEF" },
+    { name: "Budget Defender Two", position: "DEF" },
+    { name: "Budget Defender Three", position: "DEF" },
+    { name: "Alexis Mac Allister", position: "MID" },
+    { name: "Kevin De Bruyne", position: "MID" },
+    { name: "Encoded Price", position: "MID" },
+    { name: "Budget Midfielder One", position: "MID" },
+    { name: "Budget Midfielder Two", position: "MID" },
+    { name: "Rasmus Hojlund", position: "FWD" },
+    { name: "Thomas Mueller", position: "FWD" },
+    { name: "Budget Forward One", position: "FWD" }
+  ]
+});
+
+assert.equal(validSquad.valid, true, validSquad.violations.join("; "));
+assert.equal(validSquad.totalCost, 82.1);
+assert.equal(validSquad.remainingBudget, 17.9);
+assert.deepEqual(validSquad.positionCounts, { GK: 2, DEF: 5, MID: 5, FWD: 3 });
+
+const invalidSquad = await validateFifaSquad({
+  budget: 50,
+  players: [
+    { name: "David Raya", position: "GK" },
+    { name: "Bench Goalkeeper", position: "GK" },
+    { name: "Nicolas Otamendi", position: "DEF" },
+    { name: "Eric Garcia", position: "DEF" },
+    { name: "Budget Defender One", position: "DEF" },
+    { name: "Budget Defender Two", position: "DEF" },
+    { name: "Kevin Mac Allister", position: "DEF" },
+    { name: "Alexis Mac Allister", position: "MID" },
+    { name: "Kevin De Bruyne", position: "MID" },
+    { name: "Encoded Price", position: "MID" },
+    { name: "Budget Midfielder One", position: "MID" },
+    { name: "Budget Midfielder Two", position: "MID" },
+    { name: "Rasmus Hojlund", position: "FWD" },
+    { name: "Thomas Mueller", position: "FWD" },
+    { name: "Premium Forward", position: "FWD" }
+  ]
+});
+
+assert.equal(invalidSquad.valid, false);
+assert.equal(invalidSquad.totalCost, 85.9);
+assert(invalidSquad.violations.some((violation) => violation.includes("budget is 50.0m")));
+assert(invalidSquad.violations.some((violation) => violation.includes("Kevin Mac Allister has status Transferred")));
 
 console.log("fifa-player-cache edge cases passed");

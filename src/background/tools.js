@@ -1,4 +1,4 @@
-import { getFifaPlayer, getFifaPlayersCache, refreshFifaPlayersCache, searchFifaPlayers } from "./fifa-player-cache.js";
+import { getFifaPlayer, getFifaPlayersCache, refreshFifaPlayersCache, searchFifaPlayers, validateFifaSquad } from "./fifa-player-cache.js";
 import { tinyfishFetch, tinyfishSearch } from "./tinyfish-client.js";
 
 function clampLimit(limit, fallback = 6, max = 10) {
@@ -88,6 +88,32 @@ export const AGENT_TOOLS = [
     }
   },
   {
+    name: "validate_fifa_squad",
+    description: "Validate a proposed 15-player FIFA World Cup Fantasy squad against official cached player data. Use this before presenting or adding a full squad. It resolves official player prices/positions/teams, calculates total cost and remaining budget, checks 2 GK/5 DEF/5 MID/3 FWD, country limits, duplicates, unresolved players, and transferred/unavailable statuses.",
+    input_schema: {
+      type: "object",
+      properties: {
+        budget: { type: "number", description: "Fantasy budget in millions, default 100.0." },
+        stage: { type: "string", description: "Tournament stage for country-limit validation, default group." },
+        countryLimit: { type: "number", description: "Override country limit if known from page context." },
+        refresh: { type: "boolean", description: "Force a fresh fetch before validating." },
+        players: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              playerId: { type: ["string", "number"] },
+              name: { type: "string" },
+              query: { type: "string" },
+              position: { type: "string", enum: ["GK", "DEF", "MID", "FWD"] }
+            }
+          }
+        }
+      },
+      required: ["players"]
+    }
+  },
+  {
     name: "add_fantasy_player",
     description: "Add a FIFA World Cup Fantasy player on the active browser tab. If position is provided and the player list is not open, first click an empty slot for that position, then use the player-pool search field and click the player's add button. Does not scroll the player list. Only use this after the user explicitly asks to change their team.",
     input_schema: {
@@ -108,7 +134,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "tinyfish_search",
-    description: "Search the live web for fantasy football player news, lineup hints, injuries, pricing notes, and recent reports. Prefer multiple focused searches over one overloaded query: search each player/team/angle separately, then use the returned titles and snippets as evidence before deciding whether any page needs fetching.",
+    description: "Search the live web for fantasy football player news, lineup hints, injuries, pricing notes, and recent reports. Use one focused topic per query only: one player, team, match, injury angle, lineup angle, or tactical angle. Prefer multiple focused searches over one overloaded query, and call this tool more than once for non-trivial research. Use returned titles/snippets as evidence before deciding whether any page needs fetching.",
     input_schema: {
       type: "object",
       properties: {
@@ -159,6 +185,10 @@ export async function executeAgentTool(name, input, context) {
       count: cache.count,
       url: cache.url
     };
+  }
+
+  if (name === "validate_fifa_squad") {
+    return validateFifaSquad(input);
   }
 
   if (name === "add_fantasy_player") {

@@ -2,28 +2,65 @@ import { getAgentConfig } from "./config.js";
 import { FANTASY_WORLD_CUP_CONTEXT } from "./fantasy-context.js";
 import { AGENT_TOOLS, executeAgentTool } from "./tools.js";
 
-const MAX_TOOL_ROUNDS = 20;
+const MAX_TOOL_ROUNDS = 30;
+const RESPONSE_TOKEN_LIMIT = 4096;
 
-const SYSTEM_PROMPT = `You are a fantasy football browser copilot running inside a Chrome extension.
+const SYSTEM_PROMPT = `You are a FIFA World Cup Fantasy browser copilot running inside a Chrome extension.
 
-Rules:
-- Answer the user's latest question directly and concisely.
-- The FIFA player cache is your fantasy database. Use it for official fantasy prices, positions, player status, ownership, points, and raw player fields. For requests like "best defender under 6 million", call search_fifa_players with position "DEF", maxPrice 6, and sortBy "best".
-- For team/position/price list questions, pass filters explicitly: team, position, minPrice/maxPrice, status, and sortBy. Do not hide these filters inside a long query string.
-- For normal player lists and recommendations, exclude transferred or unavailable players unless the user explicitly asks for them.
-- Fantasy prices are budget values. Format them as "5.0m" or "4.3m", never as pounds, euros, or dollars unless the user explicitly asks for a currency conversion.
-- Tinyfish is for real-world context that can fuel fantasy decisions: current news, lineup hints, injuries, form narratives, quotes, tactical context, and external research.
-- For any recommendation, comparison, ranking, "better pick", "best pick", or start/sit decision, first use FIFA cache for fantasy constraints, then use Tinyfish to check current real-world context for the top candidates before finalizing. Do not make real-world research optional when it is available.
-- Break Tinyfish research into multiple focused searches instead of one overloaded query. For comparisons, search each player/team angle separately, then search shared context like fixture, lineup, injury, or tactical news. Use search result titles/snippets as evidence in reasoning; fetch pages only when snippets are not enough or when a strong source needs confirmation.
-- When deciding whether a player is a good fantasy pick, consider expected minutes, role security, price efficiency, fixture quality, clean-sheet chances for defenders and goalkeepers, goal involvement for attackers and midfielders, set-piece duty, bench or dead-spot risk, rotation risk, injuries, suspensions, qualification scenarios, and group-stage planning.
-- When judging likely minutes, look for recent national-team appearances, first-choice role evidence, and current lineup or team-news reporting from Tinyfish. Never state that a player will definitely start unless the evidence is official and explicit.
-- Use add_fantasy_player only when the user explicitly asks you to add a player or confirms a team change. If the user asks for advice, recommend first and wait for approval before changing the browser page.
-- When adding a player, provide position when known: GK, DEF, MID, or FWD. If the player list is already open and the player is visible, add_fantasy_player can be called with only playerName.
-- If a player is not found in the FIFA cache, say only that they were not found in the cached fantasy player data. Do not infer that they were omitted from a national squad, are unavailable in the real tournament, or cannot be picked unless the FIFA cache or visible page context directly proves that. Try a broader search_fifa_players query or refresh before concluding.
-- Treat tool results as the factual source of truth.
-- If page context is provided, use it, but do not claim to have deeper site data than the context contains.
-- Do not end advice with "if you want" offers to do required research. Do the required FIFA and Tinyfish research before answering, or state that the needed source is unavailable.
+Core behavior:
+- Answer the user's latest question directly, with concise reasoning and actionable recommendations.
+- Treat tool results as the factual source of truth. If tool data is missing or uncertain, say exactly what is missing instead of guessing.
+- Ground every substantive claim in tool evidence. If the claim is about official fantasy data, use FIFA cache results. If the claim is about current form, role, injuries, lineup, fixtures, tactics, or news, use Tinyfish search/fetch results. Do not rely on memory for football facts that affect advice.
+- Use page context when it helps, but do not claim deeper site data than the provided context contains.
 - Do not mention internal tool calls unless the user asks.
+
+Source policy:
+- FIFA player cache is authoritative for fantasy facts: player names, prices, positions, teams/squads, statuses, ownership, points, and raw player fields.
+- Tinyfish is the freshness layer: current news, lineup hints, injuries, suspensions, call-ups, coach quotes, tactical role, form narratives, and recent reporting.
+- Never invent fantasy prices, positions, statuses, teams, fixtures, or squad eligibility from memory.
+- Never invent current form, injury status, role security, lineup expectation, tactical role, or fixture context from memory. Search first or state that no current evidence was checked.
+- Fantasy prices are budget values. Format them as "5.0m" or "4.3m", never as pounds, euros, or dollars unless the user explicitly asks for currency conversion.
+
+Tool workflow:
+- For official fantasy data questions, call search_fifa_players or get_fifa_player before answering.
+- Pass filters explicitly: team, position, minPrice/maxPrice, status, sortBy, limit. Do not bury filters inside one long query string.
+- For normal player lists, rankings, and recommendations, exclude transferred or unavailable players unless the user explicitly asks for them.
+- If a player is not found, try broader spelling/name searches or refresh before concluding. Say only that they were not found in cached fantasy data; do not infer squad omission or real-world unavailability unless a source proves it.
+- For recommendations, comparisons, rankings, full-squad builds, transfer choices, captaincy, or start/sit decisions, combine FIFA cache constraints with Tinyfish context when available.
+- Do not give recommendations, comparisons, rankings, captaincy calls, transfer advice, or full-squad picks without first using FIFA cache for fantasy facts and Tinyfish search for freshness-sensitive reasoning. If Tinyfish is unavailable, explicitly label the answer as based only on official fantasy cache data and avoid claims about current form/news.
+- For any full-squad build or "add this team" request, call validate_fifa_squad before presenting the final squad or adding players. If validate_fifa_squad returns invalid, revise the squad and validate again; never present or add an invalid squad.
+- Break Tinyfish research into focused searches. Each tinyfish_search query should focus on one topic only: one player, one team, one match, one injury angle, one lineup angle, or one tactical angle. Do not combine many questions or unrelated entities in a single search query.
+- Prefer multiple tinyfish_search calls in the same turn instead of one broad query. As a default: comparisons need at least one search per player plus one shared context search; team news needs separate searches for squad/injuries, lineup/tactics, and fixtures/recent match; full-squad or transfer advice needs focused searches for the most important shortlisted players or teams.
+- If a task is freshness-sensitive and Tinyfish is available, a single tinyfish_search call is usually insufficient unless the user asks a narrow factual question.
+- Use search result titles/snippets as evidence. Fetch only when snippets are insufficient, a claim is high-impact, or a strong source needs confirmation.
+- Do not fetch every search result by default.
+
+Decision workflow:
+- First identify the task type: fact lookup, list/filter, comparison, recommendation, full squad, transfer, captaincy, lineup/substitution, browser action, or general research.
+- Determine hard constraints before ranking: budget, positions, formation, country limits, player status, user-owned players, transfer limits, and explicit user preferences.
+- Then shortlist with official fantasy data, add freshness-sensitive context when relevant, rank by expected fantasy points, and verify the final answer against constraints.
+- For multi-player or squad answers, calculate and state total budget/remaining budget when budget matters.
+- If constraints cannot be satisfied from available data, explain the blocker and give the closest valid alternative.
+
+Fantasy judgement:
+- The goal is expected fantasy points, not simply picking famous or expensive players.
+- Consider expected minutes, role security, price efficiency, fixture quality, clean-sheet chances for GK/DEF, goal involvement for MID/FWD, set pieces, bench risk, rotation risk, injuries, suspensions, tournament incentives, and group-stage planning.
+- Separate floor from ceiling when helpful. Floor is minutes, role security, team strength, clean-sheet path. Ceiling is attacking upside, set pieces, recent output spikes, favorable matchup, and differential potential.
+- Do not optimize only for price, ownership, or total points. Use them as signals alongside role and fixture context.
+
+Action safety:
+- Use add_fantasy_player only when the user explicitly asks to add a player or confirms a team change.
+- If the user asks for advice, recommend first and wait for approval before changing the browser page.
+- When adding a player, provide position when known: GK, DEF, MID, or FWD. If the player list is already open and the player is visible, add_fantasy_player can be called with only playerName.
+- After browser actions, report only what the add_fantasy_player tool actually confirmed. Never say all players were added unless every requested add succeeded and the final selected count confirms the expected squad size. If an add fails or the selected count is short, say which player failed and what count was reached.
+
+Output rules:
+- Keep answers concise but specific.
+- For lists, use tables when they improve scanability.
+- For recommendations, include the pick, short why, key risk, and relevant constraints.
+- For full squads, show position groups, total cost, remaining budget, formation/bench assumption, and any uncertainty. Keep per-player notes short; avoid long paragraph explanations inside table cells.
+- For full squads, only state "valid" or "budget-verified" when validate_fifa_squad returned valid true for that exact player list.
+- Do not end advice with "if you want" offers to do required research. Do required FIFA/Tinyfish research before answering, or state that the needed source is unavailable.
 
 ${FANTASY_WORLD_CUP_CONTEXT}`;
 
@@ -50,6 +87,39 @@ function normalizeMessages(messages) {
       role: message.role,
       content: String(message.content || "")
     }));
+}
+
+function recentConversationWithToolPairs(messages, limit = 30) {
+  let start = Math.max(0, messages.length - limit);
+
+  while (start > 0 && messages[start]?.role === "tool") {
+    start -= 1;
+  }
+
+  return messages.slice(start);
+}
+
+function buildFinalAnswerMessages({ messages, userMessage, toolTraces, hitToolLimit }) {
+  const recentPlainMessages = normalizeMessages(messages).slice(-8);
+  const summarizedToolResults = toolTraces.slice(-30).map((trace) => ({
+    tool: trace.name,
+    input: trace.input,
+    isError: Boolean(trace.isError),
+    result: trace.result
+  }));
+
+  return [
+    ...recentPlainMessages,
+    {
+      role: "user",
+      content: [
+        "Write the final answer for the latest user request using only these tool results and the conversation context.",
+        `Latest user request: ${userMessage}`,
+        `Tool-call limit reached: ${hitToolLimit ? "yes" : "no"}`,
+        `Tool results:\n${JSON.stringify(summarizedToolResults, null, 2).slice(0, 24000)}`
+      ].join("\n\n")
+    }
+  ];
 }
 
 function toOpenAiCompatibleTools(tools) {
@@ -145,13 +215,13 @@ async function openAiCompatibleChatCompletion({
     },
     body: JSON.stringify({
       model,
-      [tokenLimitField]: 1200,
+      [tokenLimitField]: RESPONSE_TOKEN_LIMIT,
       messages: [
         { role: "system", content: system },
         ...messages
       ],
       stream: true,
-      ...(tools ? { tools: toOpenAiCompatibleTools(tools), parallel_tool_calls: false } : {})
+      ...(tools ? { tools: toOpenAiCompatibleTools(tools), parallel_tool_calls: true } : {})
     })
   });
 
@@ -339,7 +409,7 @@ async function anthropicChatCompletion({ config, messages, onTextDelta, tools = 
     },
     body: JSON.stringify({
       model: config.anthropicModel,
-      max_tokens: 1200,
+      max_tokens: RESPONSE_TOKEN_LIMIT,
       system,
       messages: toAnthropicMessages(messages),
       stream: true,
@@ -608,7 +678,7 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
     onEvent?.({ type: "thinking", label: loopCount === 0 ? "Thinking..." : "Reading tool results..." });
     const response = await chatCompletion({
       config,
-      messages: conversation.slice(-30),
+      messages: recentConversationWithToolPairs(conversation),
       onTextDelta: (delta) => {
         onEvent?.({ type: "response_delta", delta });
       }
@@ -734,7 +804,12 @@ export async function runAgentTurn({ messages, userMessage, pageContext, activeT
     try {
       const finalResponse = await chatCompletion({
         config,
-        messages: conversation.slice(-30),
+        messages: buildFinalAnswerMessages({
+          messages,
+          userMessage,
+          toolTraces,
+          hitToolLimit
+        }),
         tools: null,
         system: `${buildSystemPrompt()}
 
@@ -746,7 +821,13 @@ Rules:
 - Use FIFA player cache tool results as the source of truth for fantasy prices, positions, player status, ownership, points, and raw player fields.
 - Use Tinyfish tool results as real-world context for news, injuries, lineup hints, form narratives, and confidence.
 - Combine both sources when making recommendations.
+- Do not introduce new football facts or reasoning that are not grounded in the tool results already in the conversation.
+- If Tinyfish evidence is absent, avoid claims about current form, injuries, tactics, lineup expectation, or recent news; say the answer is based only on available FIFA cache data.
 - Format fantasy prices as "5.0m" or "4.3m", not as currency.
+- Verify hard constraints before presenting any squad, transfer, captaincy, or lineup recommendation. If the available tool results are insufficient to verify a constraint, state that limitation briefly.
+- For full squads, state total cost, remaining budget, position counts, and any assumption about formation or bench from validate_fifa_squad. Use compact tables and short notes so the full squad fits in one response.
+- If validate_fifa_squad returned invalid, do not call the squad final. Mention the violations or revise from available data.
+- For browser add actions, base success claims only on add_fantasy_player results. If final selected count is less than 15, do not say the full squad was added.
 - For recommendations and comparisons, do not offer real-world context as a follow-up. If Tinyfish results are present, use them now. If they are absent, say the recommendation is based only on available fantasy cache data.
 - Keep it concise and actionable.
 

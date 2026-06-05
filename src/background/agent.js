@@ -9,8 +9,12 @@ const SYSTEM_PROMPT = `You are a fantasy football browser copilot running inside
 Rules:
 - Answer the user's latest question directly and concisely.
 - The FIFA player cache is your fantasy database. Use it for official fantasy prices, positions, player status, ownership, points, and raw player fields. For requests like "best defender under 6 million", call search_fifa_players with position "DEF", maxPrice 6, and sortBy "best".
+- For team/position/price list questions, pass filters explicitly: team, position, minPrice/maxPrice, status, and sortBy. Do not hide these filters inside a long query string.
+- For normal player lists and recommendations, exclude transferred or unavailable players unless the user explicitly asks for them.
+- Fantasy prices are budget values. Format them as "5.0m" or "4.3m", never as pounds, euros, or dollars unless the user explicitly asks for a currency conversion.
 - Tinyfish is for real-world context that can fuel fantasy decisions: current news, lineup hints, injuries, form narratives, quotes, tactical context, and external research.
 - For any recommendation, comparison, ranking, "better pick", "best pick", or start/sit decision, first use FIFA cache for fantasy constraints, then use Tinyfish to check current real-world context for the top candidates before finalizing. Do not make real-world research optional when it is available.
+- Break Tinyfish research into multiple focused searches instead of one overloaded query. For comparisons, search each player/team angle separately, then search shared context like fixture, lineup, injury, or tactical news. Use search result titles/snippets as evidence in reasoning; fetch pages only when snippets are not enough or when a strong source needs confirmation.
 - When deciding whether a player is a good fantasy pick, consider expected minutes, role security, price efficiency, fixture quality, clean-sheet chances for defenders and goalkeepers, goal involvement for attackers and midfielders, set-piece duty, bench or dead-spot risk, rotation risk, injuries, suspensions, qualification scenarios, and group-stage planning.
 - When judging likely minutes, look for recent national-team appearances, first-choice role evidence, and current lineup or team-news reporting from Tinyfish. Never state that a player will definitely start unless the evidence is official and explicit.
 - Use add_fantasy_player only when the user explicitly asks you to add a player or confirms a team change. If the user asks for advice, recommend first and wait for approval before changing the browser page.
@@ -22,6 +26,10 @@ Rules:
 - Do not mention internal tool calls unless the user asks.
 
 ${FANTASY_WORLD_CUP_CONTEXT}`;
+
+function sanitizeFantasyPrices(text) {
+  return String(text || "").replace(/[$£€]\s*(\d+(?:\.\d+)?m\b)/gi, "$1");
+}
 
 function buildSystemPrompt() {
   const now = new Date();
@@ -504,7 +512,7 @@ function summarizeToolTrace(trace) {
     const players = Array.isArray(trace.result?.players) ? trace.result.players.slice(0, 5) : [];
     const playerText = players
       .map((player) => {
-        const price = typeof player.price === "number" ? `$${player.price}m` : "price unknown";
+        const price = typeof player.price === "number" ? `${player.price}m` : "price unknown";
         return `${player.name} (${player.positionGroup || player.position || "position unknown"}, ${player.team || "team unknown"}, ${price})`;
       })
       .join("; ");
@@ -517,7 +525,7 @@ function summarizeToolTrace(trace) {
       return "get_fifa_player: player not found";
     }
 
-    const price = typeof player.price === "number" ? `$${player.price}m` : "price unknown";
+    const price = typeof player.price === "number" ? `${player.price}m` : "price unknown";
     return `get_fifa_player: ${player.name} (${player.positionGroup || player.position || "position unknown"}, ${player.team || "team unknown"}, ${price})`;
   }
 
@@ -738,6 +746,7 @@ Rules:
 - Use FIFA player cache tool results as the source of truth for fantasy prices, positions, player status, ownership, points, and raw player fields.
 - Use Tinyfish tool results as real-world context for news, injuries, lineup hints, form narratives, and confidence.
 - Combine both sources when making recommendations.
+- Format fantasy prices as "5.0m" or "4.3m", not as currency.
 - For recommendations and comparisons, do not offer real-world context as a follow-up. If Tinyfish results are present, use them now. If they are absent, say the recommendation is based only on available fantasy cache data.
 - Keep it concise and actionable.
 
@@ -754,7 +763,7 @@ Tool-call limit reached: ${hitToolLimit ? "yes" : "no"}.`,
   }
 
   return {
-    assistant: assistantText || contextFallbackAnswer({ toolTraces, hitToolLimit, finalError }),
+    assistant: sanitizeFantasyPrices(assistantText || contextFallbackAnswer({ toolTraces, hitToolLimit, finalError })),
     toolTraces
   };
 }

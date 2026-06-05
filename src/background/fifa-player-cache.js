@@ -2,7 +2,7 @@ const PLAYERS_URL = "https://play.fifa.com/json/fantasy/players.json";
 const SQUADS_URL = "https://play.fifa.com/json/fantasy/squads.json";
 const STORAGE_KEY = "fifaPlayersCache";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const CACHE_SCHEMA_VERSION = 3;
+const CACHE_SCHEMA_VERSION = 4;
 
 function normalizeText(value) {
   return String(value || "")
@@ -38,7 +38,12 @@ function textMatches(haystack, query) {
 
   const foldedHaystack = foldSearchText(haystack);
   const foldedQuery = foldSearchText(query);
-  return Boolean(foldedQuery && foldedHaystack.includes(foldedQuery));
+  if (foldedQuery && foldedHaystack.includes(foldedQuery)) {
+    return true;
+  }
+
+  const tokens = foldedQuery.split(" ").filter(Boolean);
+  return tokens.length > 1 && tokens.every((token) => foldedHaystack.includes(token));
 }
 
 function buildPlayerSearchText(player) {
@@ -51,6 +56,15 @@ function buildPlayerSearchText(player) {
     player.positionGroup,
     stringifyValue(player.squad),
     stringifyValue(player.raw)
+  ].filter(Boolean).join(" "));
+}
+
+function buildTeamSearchText(player) {
+  return normalizeText([
+    player.team,
+    player.teamAbbr,
+    player.squadId,
+    stringifyValue(player.squad)
   ].filter(Boolean).join(" "));
 }
 
@@ -90,13 +104,16 @@ function pickName(player) {
 
 function pickPrice(player) {
   const value = firstPresent(player, ["price", "cost", "value", "nowCost", "currentPrice"]);
-  if (typeof value === "number") {
-    return value > 100 ? value / 10 : value;
-  }
+  const parsed = typeof value === "number"
+    ? value
+    : Number(String(value ?? "").match(/\d+(?:\.\d+)?/)?.[0]);
 
-  const parsed = Number(value);
   if (!Number.isNaN(parsed)) {
-    return parsed > 100 ? parsed / 10 : parsed;
+    let normalized = parsed;
+    while (normalized > 20) {
+      normalized /= 10;
+    }
+    return Number(normalized.toFixed(1));
   }
 
   return null;
@@ -271,13 +288,36 @@ function positionMatches(player, requestedPosition) {
   }
 
   const requested = canonicalPosition(requestedPosition);
-  const rawRequested = normalizeText(requestedPosition);
-  const playerPosition = normalizeText(player.position);
   const playerGroup = normalizeText(player.positionGroup);
 
-  return playerGroup === normalizeText(requested)
-    || playerPosition === rawRequested
-    || playerPosition.includes(rawRequested);
+  return playerGroup === normalizeText(requested);
+}
+
+function isDefaultExcludedStatus(status) {
+  const normalized = normalizeText(status);
+  return normalized === "transferred" || normalized === "unavailable";
+}
+
+function shouldIncludeUnavailable(input, rawQuery) {
+  if (input.includeUnavailable === true) {
+    return true;
+  }
+
+  if (typeof input.status === "string" && input.status.trim()) {
+    return true;
+  }
+
+  return /\b(transferred|unavailable|not playing|all statuses|include unavailable)\b/.test(rawQuery);
+}
+
+function statusMatches(player, requestedStatus, includeUnavailable) {
+  const status = normalizeText(player.status);
+
+  if (requestedStatus) {
+    return textMatches(status, requestedStatus);
+  }
+
+  return includeUnavailable || !isDefaultExcludedStatus(status);
 }
 
 function comparePlayers(sortBy) {
@@ -364,6 +404,8 @@ export async function searchFifaPlayers(input) {
   const query = positionFromQuery ? stripQueryHints(rawQuery) : rawQuery;
   const position = normalizeText(input.position || positionFromQuery);
   const team = normalizeText(input.team);
+  const status = normalizeText(input.status);
+  const includeUnavailable = shouldIncludeUnavailable(input, rawQuery);
   const derivedMaxPrice = deriveMaxPriceFromText(rawQuery);
   const maxPrice = typeof input.maxPrice === "number" ? input.maxPrice : derivedMaxPrice ?? Number.POSITIVE_INFINITY;
   const minPrice = typeof input.minPrice === "number" ? input.minPrice : Number.NEGATIVE_INFINITY;
@@ -382,7 +424,11 @@ export async function searchFifaPlayers(input) {
         return false;
       }
 
-      if (team && !textMatches(buildPlayerSearchText(player), team)) {
+      if (team && !textMatches(buildTeamSearchText(player), team)) {
+        return false;
+      }
+
+      if (!statusMatches(player, status, includeUnavailable)) {
         return false;
       }
 

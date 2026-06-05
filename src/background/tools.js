@@ -47,13 +47,15 @@ export const AGENT_TOOLS = [
   },
   {
     name: "search_fifa_players",
-    description: "Search the locally cached official FIFA fantasy player data for pricing, position, team/squad, status, ownership, points, and raw player fields. Use this before answering questions about player prices or official fantasy data. For country-position requests like France defenders, pass team \"France\" and position \"DEF\" instead of putting the whole phrase in query.",
+    description: "Search the locally cached official FIFA fantasy player data for pricing, position, team/squad, status, ownership, points, and raw player fields. Use this before answering questions about player prices or official fantasy data. For country-position requests like France defenders, pass team \"France\" and position \"DEF\" instead of putting the whole phrase in query. Defaults to selectable/non-transferred players; pass status or includeUnavailable only when the user explicitly asks for transferred/unavailable players.",
     input_schema: {
       type: "object",
       properties: {
         query: { type: "string", description: "Player, team, or position text to search." },
         position: { type: "string" },
         team: { type: "string" },
+        status: { type: "string", description: "Optional player status filter, for example Playing or Transferred." },
+        includeUnavailable: { type: "boolean", description: "Set true only when the user explicitly asks to include transferred/unavailable/non-selectable players." },
         minPrice: { type: "number" },
         maxPrice: { type: "number" },
         limit: { type: "number" },
@@ -106,7 +108,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "tinyfish_search",
-    description: "Search the live web for fantasy football player news, lineup hints, injuries, pricing notes, and recent reports.",
+    description: "Search the live web for fantasy football player news, lineup hints, injuries, pricing notes, and recent reports. Prefer multiple focused searches over one overloaded query: search each player/team/angle separately, then use the returned titles and snippets as evidence before deciding whether any page needs fetching.",
     input_schema: {
       type: "object",
       properties: {
@@ -118,7 +120,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "tinyfish_fetch",
-    description: "Fetch and summarize specific URLs returned from Tinyfish search.",
+    description: "Fetch and summarize specific URLs returned from Tinyfish search. Use this selectively after search, only for the strongest 1-3 URLs when snippets are insufficient, a claim is high-impact, or official/detail confirmation is needed. Do not fetch every search result by default.",
     input_schema: {
       type: "object",
       properties: {

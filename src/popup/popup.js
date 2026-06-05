@@ -22,6 +22,10 @@ let liveAssistantText = "";
 let pendingAssistantDelta = "";
 let streamRenderFrame = 0;
 
+function sanitizeFantasyPrices(text) {
+  return String(text || "").replace(/[$£€]\s*(\d+(?:\.\d+)?m\b)/gi, "$1");
+}
+
 function resizeChatInput() {
   chatInput.style.height = "auto";
   chatInput.style.height = `${chatInput.scrollHeight}px`;
@@ -31,7 +35,7 @@ function createMessage(role, content) {
   return {
     id: crypto.randomUUID(),
     role,
-    content,
+    content: role === "assistant" ? sanitizeFantasyPrices(content) : content,
     createdAt: new Date().toISOString()
   };
 }
@@ -62,7 +66,7 @@ function renderMessages() {
     const node = document.createElement("div");
     node.className = `message ${message.role}`;
     const content = message.role === "assistant"
-      ? renderMarkdown(message.content)
+      ? renderMarkdown(sanitizeFantasyPrices(message.content))
       : document.createElement("div");
 
     if (message.role !== "assistant") {
@@ -87,7 +91,7 @@ function renderMessages() {
   if (liveAssistantText) {
     const node = document.createElement("div");
     node.className = "message assistant streaming";
-    const content = renderMarkdown(liveAssistantText);
+    const content = renderMarkdown(sanitizeFantasyPrices(liveAssistantText));
     node.append(content);
     messagesEl.append(node);
   }
@@ -165,7 +169,7 @@ function clearAssistantStream() {
 
 function commitAssistantStream() {
   flushAssistantDelta();
-  const content = liveAssistantText.trim();
+  const content = sanitizeFantasyPrices(liveAssistantText).trim();
   if (!content) {
     clearAssistantStream();
     return;
@@ -257,6 +261,10 @@ function isTableRow(line) {
   return trimmed.includes("|") && trimmed.split("|").filter((cell) => cell.trim()).length >= 2;
 }
 
+function isHorizontalRule(line) {
+  return /^-{3,}$/.test(line.trim());
+}
+
 function splitTableRow(line) {
   return line
     .trim()
@@ -345,6 +353,13 @@ function renderMarkdown(markdown) {
       continue;
     }
 
+    if (isHorizontalRule(line)) {
+      const rule = document.createElement("hr");
+      root.append(rule);
+      index += 1;
+      continue;
+    }
+
     const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
     if (headingMatch) {
       const heading = document.createElement(`h${headingMatch[1].length + 2}`);
@@ -411,6 +426,7 @@ function renderMarkdown(markdown) {
       !/^(#{1,3})\s+/.test(lines[index].trim()) &&
       !/^[-*]\s+/.test(lines[index].trim()) &&
       !/^\d+\.\s+/.test(lines[index].trim()) &&
+      !isHorizontalRule(lines[index].trim()) &&
       !(isTableRow(lines[index].trim()) && index + 1 < lines.length && isTableDivider(lines[index + 1])) &&
       !/^```/.test(lines[index].trim())
     ) {

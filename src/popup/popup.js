@@ -5,8 +5,13 @@ const sendButton = document.querySelector("#send-button");
 const clearButton = document.querySelector("#clear-chat");
 const clearKeysButton = document.querySelector("#clear-keys");
 const settingsForm = document.querySelector("#settings-form");
+const llmProvider = document.querySelector("#llm-provider");
 const openRouterKey = document.querySelector("#openrouter-key");
 const openRouterModel = document.querySelector("#openrouter-model");
+const openAiKey = document.querySelector("#openai-key");
+const openAiModel = document.querySelector("#openai-model");
+const anthropicKey = document.querySelector("#anthropic-key");
+const anthropicModel = document.querySelector("#anthropic-model");
 const tinyfishKey = document.querySelector("#tinyfish-key");
 const settingsStatus = document.querySelector("#settings-status");
 const toolStatus = document.querySelector("#tool-status");
@@ -38,10 +43,7 @@ function renderMessages() {
   messagesEl.textContent = "";
 
   if (!messages.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "Ask a question to test popup to background agent communication. Configure keys for live OpenRouter and Tinyfish calls.";
-    messagesEl.append(empty);
+    messagesEl.append(renderOnboardingCard());
     return;
   }
 
@@ -93,6 +95,43 @@ function renderMessages() {
   if (shouldStickToBottom) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
+}
+
+function renderOnboardingCard() {
+  const card = document.createElement("div");
+  card.className = "onboarding-card";
+
+  const eyebrow = document.createElement("div");
+  eyebrow.className = "onboarding-eyebrow";
+  eyebrow.textContent = "Setup";
+
+  const title = document.createElement("h2");
+  title.textContent = "Connect your fantasy copilot";
+
+  const steps = document.createElement("ol");
+  for (const stepText of [
+    "Click Settings in the top right.",
+    "Choose OpenRouter, OpenAI, or Anthropic.",
+    "Save the matching model API key.",
+    "Save your Tinyfish API key."
+  ]) {
+    const step = document.createElement("li");
+    step.textContent = stepText;
+    steps.append(step);
+  }
+
+  const sample = document.createElement("button");
+  sample.className = "sample-prompt";
+  sample.type = "button";
+  sample.textContent = "Compare David Raya and Unai Simon";
+  sample.addEventListener("click", () => {
+    chatInput.value = sample.textContent;
+    resizeChatInput();
+    chatInput.focus();
+  });
+
+  card.append(eyebrow, title, steps, sample);
+  return card;
 }
 
 function flushAssistantDelta() {
@@ -388,13 +427,48 @@ function sendRuntimeMessage(message) {
   return chrome.runtime.sendMessage(message);
 }
 
+function setSelectValue(select, value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return;
+  }
+
+  if (![...select.options].some((option) => option.value === normalizedValue)) {
+    const option = document.createElement("option");
+    option.value = normalizedValue;
+    option.textContent = normalizedValue;
+    select.append(option);
+  }
+
+  select.value = normalizedValue;
+}
+
+function updateProviderFields() {
+  const provider = llmProvider.value;
+  for (const section of settingsForm.querySelectorAll("[data-provider-section]")) {
+    const isSelected = section.dataset.providerSection === provider;
+    section.open = isSelected;
+    section.classList.toggle("selected", isSelected);
+  }
+}
+
 async function loadConfigStatus() {
   const config = await sendRuntimeMessage({ type: "GET_AGENT_CONFIG" });
+  llmProvider.value = config?.llmProvider || "openrouter";
   if (config?.openRouterModel) {
     openRouterModel.value = config.openRouterModel;
   }
+  if (config?.openAiModel) {
+    setSelectValue(openAiModel, config.openAiModel);
+  }
+  if (config?.anthropicModel) {
+    setSelectValue(anthropicModel, config.anthropicModel);
+  }
   openRouterKey.placeholder = config?.openRouterApiKey === "configured" ? "Configured" : "";
+  openAiKey.placeholder = config?.openAiApiKey === "configured" ? "Configured" : "";
+  anthropicKey.placeholder = config?.anthropicApiKey === "configured" ? "Configured" : "";
   tinyfishKey.placeholder = config?.tinyfishApiKey === "configured" ? "Configured" : "";
+  updateProviderFields();
 }
 
 async function loadFifaCacheStatus() {
@@ -539,6 +613,7 @@ clearButton.addEventListener("click", async () => {
 });
 
 chatInput.addEventListener("input", resizeChatInput);
+llmProvider.addEventListener("change", updateProviderFields);
 chatInput.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
     return;
@@ -556,8 +631,13 @@ settingsForm.addEventListener("submit", async (event) => {
   settingsStatus.textContent = "";
 
   const config = {
+    llmProvider: llmProvider.value,
     openRouterApiKey: openRouterKey.value,
     openRouterModel: openRouterModel.value,
+    openAiApiKey: openAiKey.value,
+    openAiModel: openAiModel.value,
+    anthropicApiKey: anthropicKey.value,
+    anthropicModel: anthropicModel.value,
     tinyfishApiKey: tinyfishKey.value
   };
 
@@ -572,6 +652,8 @@ settingsForm.addEventListener("submit", async (event) => {
   }
 
   openRouterKey.value = "";
+  openAiKey.value = "";
+  anthropicKey.value = "";
   tinyfishKey.value = "";
   settingsStatus.textContent = "Saved.";
   await loadConfigStatus();
@@ -587,8 +669,12 @@ clearKeysButton.addEventListener("click", async () => {
   }
 
   openRouterKey.value = "";
+  openAiKey.value = "";
+  anthropicKey.value = "";
   tinyfishKey.value = "";
   openRouterKey.placeholder = "";
+  openAiKey.placeholder = "";
+  anthropicKey.placeholder = "";
   tinyfishKey.placeholder = "";
   settingsStatus.textContent = "Keys cleared.";
 });

@@ -32,6 +32,8 @@
   ],
   "host_permissions": [
     "https://openrouter.ai/api/v1/*",
+    "https://api.openai.com/v1/*",
+    "https://api.anthropic.com/v1/*",
     "https://api.search.tinyfish.ai/*",
     "https://api.fetch.tinyfish.ai/*",
     "https://play.fifa.com/fantasy/team*",

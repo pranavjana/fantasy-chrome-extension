@@ -35,8 +35,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     getAgentConfig()
       .then((config) => {
         sendResponse({
+          llmProvider: config.llmProvider,
           openRouterApiKey: config.openRouterApiKey ? "configured" : "",
           openRouterModel: config.openRouterModel,
+          openAiApiKey: config.openAiApiKey ? "configured" : "",
+          openAiModel: config.openAiModel,
+          anthropicApiKey: config.anthropicApiKey ? "configured" : "",
+          anthropicModel: config.anthropicModel,
           tinyfishApiKey: config.tinyfishApiKey ? "configured" : ""
         });
       })

@@ -4,7 +4,50 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const CACHE_SCHEMA_VERSION = 2;
 
 function normalizeText(value) {
-  return String(value || "").toLowerCase().trim();
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[øØ]/g, "o")
+    .replace(/[æÆ]/g, "ae")
+    .replace(/[œŒ]/g, "oe")
+    .replace(/[ßẞ]/g, "ss")
+    .replace(/[łŁ]/g, "l")
+    .replace(/[đĐðÐ]/g, "d")
+    .replace(/[þÞ]/g, "th")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function foldSearchText(value) {
+  return normalizeText(value)
+    .replace(/ae/g, "a")
+    .replace(/oe/g, "o")
+    .replace(/ue/g, "u");
+}
+
+function textMatches(haystack, query) {
+  if (!query) {
+    return true;
+  }
+
+  if (haystack.includes(query)) {
+    return true;
+  }
+
+  const foldedHaystack = foldSearchText(haystack);
+  const foldedQuery = foldSearchText(query);
+  return Boolean(foldedQuery && foldedHaystack.includes(foldedQuery));
+}
+
+function buildPlayerSearchText(player) {
+  return normalizeText([
+    player.name,
+    player.team,
+    player.position,
+    player.positionGroup,
+    stringifyValue(player.raw)
+  ].filter(Boolean).join(" "));
 }
 
 function stringifyValue(value) {
@@ -287,8 +330,8 @@ export async function searchFifaPlayers(input) {
 
   const players = cache.players
     .filter((player) => {
-      const haystack = normalizeText(`${player.name} ${player.team} ${player.position} ${player.positionGroup}`);
-      if (query && !haystack.includes(query)) {
+      const haystack = buildPlayerSearchText(player);
+      if (!textMatches(haystack, query)) {
         return false;
       }
 
@@ -296,7 +339,7 @@ export async function searchFifaPlayers(input) {
         return false;
       }
 
-      if (team && !normalizeText(player.team).includes(team)) {
+      if (team && !textMatches(normalizeText(player.team), team)) {
         return false;
       }
 
@@ -327,7 +370,7 @@ export async function getFifaPlayer(input) {
   const query = normalizeText(input.query);
 
   const player = cache.players.find((candidate) => String(candidate.id) === String(playerId))
-    || (query ? cache.players.find((candidate) => normalizeText(candidate.name).includes(query)) : null);
+    || (query ? cache.players.find((candidate) => textMatches(buildPlayerSearchText(candidate), query)) : null);
 
   return {
     fetchedAt: cache.fetchedAt,

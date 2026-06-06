@@ -30,6 +30,15 @@ async function getActivePageContext(tab) {
   }
 }
 
+function safePostPortMessage(port, message) {
+  try {
+    port.postMessage(message);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_AGENT_CONFIG") {
     getAgentConfig()
@@ -128,16 +137,16 @@ chrome.runtime.onConnect.addListener((port) => {
         userMessage: String(message.userMessage || ""),
         pageContext,
         activeTabId: activeTab?.id,
-        onEvent: (event) => port.postMessage(event)
+        onEvent: (event) => safePostPortMessage(port, event)
       });
 
-      port.postMessage({
+      safePostPortMessage(port, {
         type: "final",
         assistant: result.assistant,
         toolTraces: result.toolTraces
       });
     })().catch((error) => {
-      port.postMessage({
+      safePostPortMessage(port, {
         type: "error",
         error: error instanceof Error ? error.message : "Agent turn failed."
       });

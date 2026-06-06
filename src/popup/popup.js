@@ -40,6 +40,71 @@ function createMessage(role, content) {
   };
 }
 
+function createErrorMessage(error) {
+  return {
+    id: crypto.randomUUID(),
+    role: "error",
+    error: normalizeAgentError(error),
+    createdAt: new Date().toISOString()
+  };
+}
+
+function extractProviderError(rawError) {
+  const text = String(rawError || "");
+  const jsonStart = text.indexOf("{");
+  if (jsonStart === -1) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text.slice(jsonStart));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAgentError(rawError) {
+  const text = String(rawError || "Agent request failed.");
+  const providerPayload = extractProviderError(text);
+  const providerMessage = providerPayload?.error?.message || text;
+  const statusMatch = text.match(/\bstatus\s+(\d{3})\b/i);
+  const retryMatch = providerMessage.match(/try again in\s+(\d+)\s*ms/i);
+  const modelMatch = providerMessage.match(/for\s+([a-z0-9._:-]+)\s+in organization/i);
+
+  if (statusMatch?.[1] === "429" || providerPayload?.error?.code === "rate_limit_exceeded") {
+    const retryMs = retryMatch ? Number(retryMatch[1]) : null;
+    const retryText = retryMs !== null
+      ? retryMs < 1000 ? `${retryMs}ms` : `${(retryMs / 1000).toFixed(1)}s`
+      : "a short moment";
+
+    return {
+      title: "Rate limit reached",
+      summary: `The selected model is temporarily over its token-per-minute limit. Try again in ${retryText}.`,
+      details: [
+        modelMatch?.[1] ? `Model: ${modelMatch[1]}` : "",
+        "Shorter prompts, fewer tool calls, or a smaller model can reduce this."
+      ].filter(Boolean),
+      raw: text
+    };
+  }
+
+  if (statusMatch?.[1]) {
+    return {
+      title: `Provider error ${statusMatch[1]}`,
+      summary: providerMessage,
+      details: [],
+      raw: text
+    };
+  }
+
+  return {
+    title: "Agent error",
+    summary: providerMessage,
+    details: [],
+    raw: text
+  };
+}
+
 function renderMessages() {
   const distanceFromBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
   const shouldStickToBottom = distanceFromBottom < 80;
@@ -54,6 +119,11 @@ function renderMessages() {
   for (const message of messages) {
     if (message.role === "tool") {
       messagesEl.append(renderToolCard(message.trace));
+      continue;
+    }
+
+    if (message.role === "error") {
+      messagesEl.append(renderErrorCard(message.error || normalizeAgentError(message.content)));
       continue;
     }
 
@@ -569,6 +639,35 @@ function renderThinkingCard(label) {
   return node;
 }
 
+function renderErrorCard(error) {
+  const normalized = error?.title ? error : normalizeAgentError(error?.raw || error?.summary || error);
+  const card = document.createElement("div");
+  card.className = "error-card";
+
+  const title = document.createElement("div");
+  title.className = "error-title";
+  title.textContent = normalized.title;
+
+  const summary = document.createElement("div");
+  summary.className = "error-summary";
+  summary.textContent = normalized.summary;
+
+  card.append(title, summary);
+
+  if (Array.isArray(normalized.details) && normalized.details.length) {
+    const details = document.createElement("ul");
+    details.className = "error-details";
+    for (const detail of normalized.details) {
+      const item = document.createElement("li");
+      item.textContent = detail;
+      details.append(item);
+    }
+    card.append(details);
+  }
+
+  return card;
+}
+
 function renderToolCard(trace) {
   const toolCard = document.createElement("div");
   toolCard.className = `tool-card${trace.isError ? " error" : ""}${trace.status === "running" ? " running" : ""}`;
@@ -757,7 +856,7 @@ chatForm.addEventListener("submit", async (event) => {
     }
 
     if (eventMessage.type === "error") {
-      messages = [...messages, createMessage("assistant", eventMessage.error || "Agent request failed.")];
+      messages = [...messages, createErrorMessage(eventMessage.error || "Agent request failed.")];
       liveEvents = [];
       clearAssistantStream();
       toolStatus.textContent = "Error";

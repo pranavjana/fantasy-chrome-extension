@@ -2,6 +2,15 @@ const SEARCH_ENDPOINT = "https://api.search.tinyfish.ai";
 const FETCH_ENDPOINT = "https://api.fetch.tinyfish.ai";
 const SEARCH_TIMEOUT_MS = 15_000;
 const FETCH_TIMEOUT_MS = 30_000;
+const TINYFISH_REQUEST_ORIGIN = "WorldCupExtension";
+
+function tinyfishHeaders(apiKey) {
+  return {
+    "X-API-Key": apiKey,
+    "X-TF-ORIGIN": TINYFISH_REQUEST_ORIGIN,
+    "X-TF-Request-Origin": TINYFISH_REQUEST_ORIGIN
+  };
+}
 
 async function fetchWithTimeout(url, options, timeoutMs, label) {
   const controller = new AbortController();
@@ -36,9 +45,7 @@ export async function tinyfishSearch({ apiKey, query, limit = 8 }) {
   const response = await fetchWithTimeout(
     url,
     {
-      headers: {
-        "X-API-Key": apiKey
-      }
+      headers: tinyfishHeaders(apiKey)
     },
     SEARCH_TIMEOUT_MS,
     "Tinyfish Search"
@@ -67,7 +74,7 @@ export async function tinyfishFetch({ apiKey, urls }) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": apiKey
+        ...tinyfishHeaders(apiKey)
       },
       body: JSON.stringify({
         urls,

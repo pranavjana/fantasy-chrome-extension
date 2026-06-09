@@ -2,12 +2,11 @@ const SEARCH_ENDPOINT = "https://api.search.tinyfish.ai";
 const FETCH_ENDPOINT = "https://api.fetch.tinyfish.ai";
 const SEARCH_TIMEOUT_MS = 15_000;
 const FETCH_TIMEOUT_MS = 30_000;
-const TINYFISH_REQUEST_ORIGIN = "WorldCupExtension";
+const TINYFISH_REQUEST_ORIGIN = "worldcup-extension";
 
 function tinyfishHeaders(apiKey) {
   return {
     "X-API-Key": apiKey,
-    "X-TF-ORIGIN": TINYFISH_REQUEST_ORIGIN,
     "X-TF-Request-Origin": TINYFISH_REQUEST_ORIGIN
   };
 }
